@@ -1,0 +1,67 @@
+name: 发布 Docker 镜像
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: 构建并推送多架构镜像
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 生成镜像标签
+        id: tags
+        shell: bash
+        run: |
+          timestamp="$(TZ=Asia/Shanghai date '+%Y.%m.%d_%H.%M')"
+          echo "timestamp=${timestamp}" >> "$GITHUB_OUTPUT"
+          echo "将发布 uxiaohan/cftun-ui:${timestamp} 和 latest"
+
+      - name: 启用 QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64,arm64
+
+      - name: 配置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+
+      - name: 登录 Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 构建并推送镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          pull: true
+          no-cache: true
+          provenance: false
+          sbom: false
+          tags: |
+            uxiaohan/cftun-ui:latest
+            uxiaohan/cftun-ui:${{ steps.tags.outputs.timestamp }}
+
+      - name: 清理临时构建数据
+        if: always()
+        shell: bash
+        run: |
+          docker logout || true
+          docker buildx prune --all --force || true
+          docker system prune --all --force || true

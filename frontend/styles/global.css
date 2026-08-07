@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --color-canvas: #f6f7f8; --color-surface: #fff; --color-elevated: #fff;
+  --color-line: rgba(0,0,0,.1); --color-primary: #5e6ad2; --color-primary-hover: #6e78e6; --color-muted: #6b7280;
+}
+:root { color-scheme: light; --ease-out: cubic-bezier(.16,1,.3,1); }
+@layer base {
+  * { box-sizing: border-box; }
+  html { @apply bg-canvas; scrollbar-gutter: stable; }
+  body { @apply m-0 min-h-screen bg-canvas font-sans text-[#1c1f23] antialiased; background-image: radial-gradient(ellipse 70% 45% at 50% -15%,rgba(94,106,210,.06),transparent 70%); }
+  button,a,input,select,textarea { @apply outline-none; } button,a { -webkit-tap-highlight-color: transparent; } button { font: inherit; }
+  ::selection { background: rgba(94,106,210,.42); }
+}
+@layer components {
+  .card { @apply rounded-xl border border-black/[.08] bg-surface shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(0,0,0,.06)]; }
+  .btn-primary { @apply inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-primary/80 bg-primary px-3.5 text-[13px] font-medium text-white shadow-[inset_0_1px_rgba(255,255,255,.15),0_4px_14px_rgba(94,106,210,.2)] transition-all hover:bg-primary-hover active:scale-[.98] disabled:pointer-events-none disabled:opacity-45; }
+  .btn-secondary { @apply inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-black/[.1] bg-black/[.025] px-3.5 text-[13px] font-medium text-[#3a3f45] transition-all hover:bg-black/[.055] active:scale-[.98] disabled:pointer-events-none disabled:opacity-45; }
+  .btn-ghost { @apply inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-transparent px-3.5 text-[13px] font-medium text-muted transition hover:bg-black/[.05] hover:text-[#1c1f23] disabled:pointer-events-none disabled:opacity-45; }
+  .field { @apply h-9 w-full rounded-md border border-black/[.12] bg-white px-3 text-[13px] text-[#25282d] shadow-[inset_0_1px_2px_rgba(0,0,0,.035)] transition placeholder:text-[#9aa0aa] hover:border-black/[.2] focus:border-primary/80 focus:ring-2 focus:ring-primary/15; }
+  textarea.field { @apply h-auto py-2; }
+  .label { @apply mb-2 block text-xs font-medium text-[#555b64]; }
+  .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[.12em] text-muted; }
+  .badge { @apply inline-flex items-center gap-1.5 rounded-full border border-black/[.08] bg-black/[.03] px-2 py-1 text-[11px] font-medium; }
+  .icon-btn { @apply grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-transparent text-muted transition hover:border-black/[.08] hover:bg-black/[.05] hover:text-[#1c1f23]; }
+  .alert-error { @apply rounded-lg border border-red-500/20 bg-red-500/[.08] px-3.5 py-3 text-[13px] text-red-600; }
+  .alert-warning { @apply rounded-lg border border-amber-500/20 bg-amber-500/[.08] px-3.5 py-3 text-[13px] text-amber-700; }
+}
+.spinner { width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:999px;animation:spin .65s linear infinite; }
+.skeleton { background:linear-gradient(90deg,rgba(0,0,0,.045),rgba(0,0,0,.09),rgba(0,0,0,.045));background-size:220% 100%;animation:shimmer 1.5s infinite; }
+.sr-only { position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0; }
+.fade-enter-active,.fade-leave-active,.app-fade-enter-active,.app-fade-leave-active { transition:opacity 180ms ease; }.fade-enter-from,.fade-leave-to,.app-fade-enter-from,.app-fade-leave-to { opacity:0; }
+.select-enter-active,.select-leave-active { transition:opacity 130ms ease,transform 180ms var(--ease-out); }.select-enter-from,.select-leave-to { opacity:0;transform:translateY(-4px) scale(.98); }
+@keyframes spin { to { transform:rotate(360deg); } } @keyframes shimmer { to { background-position:-220% 0; } }
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}

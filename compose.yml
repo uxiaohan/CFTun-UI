@@ -1,0 +1,18 @@
+services:
+  cftun-ui:
+    build: .
+    image: cftun-ui:latest
+    container_name: cftun-ui
+    network_mode: host
+    restart: unless-stopped
+    stop_grace_period: 20s
+    environment:
+      SERVER_HOST: 127.0.0.1
+      SERVER_PORT: 6611
+      DATA_DIR: /data
+    volumes:
+      - cftun-data:/data
+
+volumes:
+  cftun-data:
+    name: cftun-data

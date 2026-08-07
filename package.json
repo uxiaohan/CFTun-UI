@@ -1,0 +1,21 @@
+{
+  "name": "cftun-ui",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch index.ts",
+    "dev:frontend": "bun run --cwd frontend dev",
+    "build": "bun run build:frontend",
+    "build:frontend": "bun run --cwd frontend build",
+    "start": "bun index.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit && bun run --cwd frontend check"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

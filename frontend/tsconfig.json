@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "types": ["vite/client", "node"],
+    "jsx": "preserve",
+    "allowJs": false,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["./**/*.ts", "./**/*.vue", "./env.d.ts", "./vite.config.ts"],
+  "exclude": ["./node_modules", "./dist"]
+}
