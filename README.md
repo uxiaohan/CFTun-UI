@@ -7,6 +7,16 @@
 `Bun` · `Vue 3` · `TypeScript` · `SQLite` · `Distroless` · `AMD64 / ARM64`
 
 ```bash
+docker run -d \
+  --name cftun-ui \
+  --network host \
+  --restart always \
+  --stop-timeout 20 \
+  -v cftun-data:/data \
+  uxiaohan/cftun-ui:latest
+```
+
+```bash
 docker pull uxiaohan/cftun-ui:latest
 docker compose up -d
 ```
