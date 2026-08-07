@@ -22,7 +22,7 @@ docker pull uxiaohan/cftun-ui:latest
 docker compose up -d
 ```
 
-控制台：<http://127.0.0.1:6611>
+控制台：<http://127.0.0.1:9911>
 
 ## ⚡ Features
 
@@ -78,7 +78,7 @@ docker compose logs -f cftun-ui
 
 - Linux：原生支持。
 - macOS / Windows：Docker Desktop 4.34+，启用 `Resources → Network → Host networking`。
-- WSL2 Debian 内运行 Docker Engine：服务监听 `0.0.0.0:6611`，Windows 侧通常可直接访问 `127.0.0.1:6611`；若 localhost 转发关闭，可使用 WSL IP 访问。
+- WSL2 Debian 内运行 Docker Engine：服务监听 `0.0.0.0:9911`，Windows 侧通常可直接访问 `127.0.0.1:9911`；若 localhost 转发关闭，可使用启动日志中的 WSL IP 访问。
 
 数据卷与数据库：
 

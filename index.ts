@@ -1,8 +1,9 @@
 import { createApp } from "./src/server.ts";
+import { startupBanner } from "./src/startup.ts";
 
 const app = createApp();
 const hostname = process.env.SERVER_HOST ?? "0.0.0.0";
-const port = Number(process.env.SERVER_PORT ?? 6611);
+const port = Number(process.env.SERVER_PORT ?? 9911);
 const frontendRoot = process.env.FRONTEND_DIR ?? `${import.meta.dir}/frontend/dist`;
 
 const server = Bun.serve({ hostname, port, fetch: async (request) => {
@@ -17,7 +18,7 @@ const server = Bun.serve({ hostname, port, fetch: async (request) => {
   const index = Bun.file(`${frontendRoot}/index.html`);
   return await index.exists() ? new Response(request.method === "HEAD" ? null : index, { headers: { "Cache-Control": "no-cache" } }) : new Response("Frontend is not built. Run bun run build:frontend.", { status: 503 });
 } });
-console.log(`CFTun-UI backend listening on ${server.url}`);
+console.log(startupBanner(hostname, port));
 
 if (app.db.getSetting("connector_auto_start") === "true" && app.db.getSetting("setup_completed") === "true") {
   void app.connector.start();

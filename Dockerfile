@@ -40,7 +40,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production \
     SERVER_HOST=0.0.0.0 \
-    SERVER_PORT=6611 \
+    SERVER_PORT=9911 \
     DATA_DIR=/data \
     FRONTEND_DIR=/app/frontend/dist \
     CLOUDFLARED_PATH=/usr/local/bin/cloudflared \

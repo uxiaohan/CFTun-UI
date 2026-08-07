@@ -14,7 +14,7 @@ services:
         compress: "true"
     environment:
       SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 6611
+      SERVER_PORT: 9911
       DATA_DIR: /data
     volumes:
       - cftun-data:/data
