@@ -1,7 +1,7 @@
 import { createApp } from "./src/server.ts";
 
 const app = createApp();
-const hostname = process.env.SERVER_HOST ?? "127.0.0.1";
+const hostname = process.env.SERVER_HOST ?? "0.0.0.0";
 const port = Number(process.env.SERVER_PORT ?? 6611);
 const frontendRoot = process.env.FRONTEND_DIR ?? `${import.meta.dir}/frontend/dist`;
 

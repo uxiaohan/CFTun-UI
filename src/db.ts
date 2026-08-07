@@ -6,7 +6,7 @@ export class AppDatabase {
 
   constructor(path = process.env.DATABASE_PATH ?? (process.env.DATA_DIR ? `${process.env.DATA_DIR}/cftun-ui.sqlite` : "./cftun-ui.sqlite")) {
     this.sqlite = new Database(path, { create: true, strict: true });
-    this.sqlite.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
+    this.sqlite.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA wal_autocheckpoint = 64; PRAGMA journal_size_limit = 524288;");
     this.initializeSchema();
   }
 
@@ -113,12 +113,14 @@ export class AppDatabase {
   createOperation(action: string, mappingId?: string, requestedId?: string): string {
     const id = requestedId && /^[0-9a-f-]{36}$/i.test(requestedId) ? requestedId : crypto.randomUUID(); const now = new Date().toISOString();
     this.sqlite.query("INSERT INTO operations VALUES(?,?,?,?,?,?,?,?,?)").run(id, action, mappingId ?? null, "running", "validate", null, null, now, now);
+    this.pruneOperations();
     return id;
   }
 
   updateOperation(id: string, stage: string, status = "running", message?: string, details?: unknown): void {
     this.sqlite.query("UPDATE operations SET stage=?,status=?,message=?,details_json=?,updated_at=? WHERE id=?")
-      .run(stage, status, message ?? null, details === undefined ? null : JSON.stringify(details), new Date().toISOString(), id);
+      .run(stage, status, boundedText(message, 4096), boundedDetails(details), new Date().toISOString(), id);
+    this.pruneOperations();
   }
 
   operations(limit = 50): unknown[] {
@@ -128,6 +130,39 @@ export class AppDatabase {
   operation(id: string): unknown | null {
     return this.sqlite.query("SELECT id,action,mapping_id AS mappingId,status,stage,message,details_json AS details,created_at AS createdAt,updated_at AS updatedAt FROM operations WHERE id=?").get(id);
   }
+
+  private pruneOperations(): void {
+    this.sqlite.exec(`
+      DELETE FROM operations WHERE id IN (
+        SELECT id FROM operations ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET 500
+      );
+      WITH sized AS (
+        SELECT id, SUM(
+          length(CAST(id AS BLOB)) + length(CAST(action AS BLOB)) +
+          length(CAST(COALESCE(mapping_id,'') AS BLOB)) + length(CAST(status AS BLOB)) +
+          length(CAST(stage AS BLOB)) + length(CAST(COALESCE(message,'') AS BLOB)) +
+          length(CAST(COALESCE(details_json,'') AS BLOB)) + length(CAST(created_at AS BLOB)) +
+          length(CAST(updated_at AS BLOB))
+        ) OVER (ORDER BY created_at DESC, rowid DESC) AS bytes
+        FROM operations
+      )
+      DELETE FROM operations WHERE id IN (SELECT id FROM sized WHERE bytes > 524288);
+    `);
+  }
+}
+
+function boundedText(value: string | undefined, maxBytes: number): string | null {
+  if (value === undefined) return null;
+  const bytes = new TextEncoder().encode(value);
+  if (bytes.byteLength <= maxBytes) return value;
+  const suffix = "…[已截断]"; let prefix = new TextDecoder().decode(bytes.slice(0, maxBytes - 16));
+  while (prefix && new TextEncoder().encode(prefix + suffix).byteLength > maxBytes) prefix = prefix.slice(0, -1);
+  return prefix + suffix;
+}
+function boundedDetails(value: unknown): string | null {
+  if (value === undefined) return null;
+  const json = JSON.stringify(value);
+  return new TextEncoder().encode(json).byteLength <= 32768 ? json : '{"truncated":true}';
 }
 
 function rowToMapping(row: Record<string, unknown>): MappingRecord {

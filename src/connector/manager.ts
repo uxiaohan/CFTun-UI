@@ -22,10 +22,18 @@ export class ConnectorManager {
   private startedAt: string | null = null;
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
   private logs: ConnectorLog[] = [];
+  private logSizes: number[] = [];
+  private logBytes = 0;
   private logId = 0;
   private subscribers = new Set<(event: string, data: unknown) => void>();
 
-  constructor(private readonly settings: () => AppSettings, private readonly maxLogs = 1000, private readonly command = process.env.CLOUDFLARED_PATH ?? "cloudflared") {}
+  constructor(
+    private readonly settings: () => AppSettings,
+    private readonly maxLogs = 500,
+    private readonly command = process.env.CLOUDFLARED_PATH ?? "cloudflared",
+    private readonly maxLogBytes = 1024 * 1024,
+    private readonly maxLineBytes = 8 * 1024,
+  ) {}
 
   snapshot(): ConnectorSnapshot {
     return { state: this.state, pid: this.process?.pid ?? null, desired: this.desired, attempts: this.attempts, lastExitCode: this.lastExitCode, nextRestartAt: this.nextRestartAt, startedAt: this.startedAt };
@@ -101,8 +109,8 @@ export class ConnectorManager {
     const reader = stream.getReader(); const decoder = new TextDecoder(); let pending = "";
     try {
       while (true) {
-        const { value, done } = await reader.read(); if (done) break; pending += decoder.decode(value, { stream: true });
-        const lines = pending.split(/\r?\n/); pending = lines.pop() ?? "";
+        const { value, done } = await reader.read(); if (done) break;
+        const lines = (pending + decoder.decode(value, { stream: true })).split(/\r?\n/); pending = truncateUtf8(lines.pop() ?? "", this.maxLineBytes);
         for (const line of lines) if (line) this.addLog(source, redact(line, this.settings().tunnel_token));
       }
       pending += decoder.decode(); if (pending) this.addLog(source, redact(pending, this.settings().tunnel_token));
@@ -110,8 +118,12 @@ export class ConnectorManager {
   }
 
   private addLog(stream: ConnectorLog["stream"], message: string): void {
-    const log = { id: ++this.logId, timestamp: new Date().toISOString(), stream, message };
-    this.logs.push(log); if (this.logs.length > this.maxLogs) this.logs.splice(0, this.logs.length - this.maxLogs);
+    const log = { id: ++this.logId, timestamp: new Date().toISOString(), stream, message: truncateUtf8(message, this.maxLineBytes) };
+    const size = utf8Size(JSON.stringify(log));
+    this.logs.push(log); this.logSizes.push(size); this.logBytes += size;
+    while (this.logs.length > this.maxLogs || this.logBytes > this.maxLogBytes) {
+      this.logs.shift(); this.logBytes -= this.logSizes.shift() ?? 0;
+    }
     this.emit("log", log);
   }
 
@@ -119,6 +131,15 @@ export class ConnectorManager {
 }
 
 function redact(value: string, token?: string): string { return token ? value.replaceAll(token, "[REDACTED]") : value; }
+function utf8Size(value: string): number { return new TextEncoder().encode(value).byteLength; }
+function truncateUtf8(value: string, maxBytes: number): string {
+  const bytes = new TextEncoder().encode(value);
+  if (bytes.byteLength <= maxBytes) return value;
+  const suffix = "…[已截断]"; const suffixBytes = new TextEncoder().encode(suffix);
+  let prefix = new TextDecoder().decode(bytes.slice(0, Math.max(0, maxBytes - suffixBytes.byteLength)));
+  while (prefix && utf8Size(prefix + suffix) > maxBytes) prefix = prefix.slice(0, -1);
+  return prefix + suffix;
+}
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 function connectorProtocol(value?: string): ConnectorProtocol {
   if (value === undefined || value === "auto" || value === "quic" || value === "http2") return value ?? "auto";

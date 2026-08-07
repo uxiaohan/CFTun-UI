@@ -6,8 +6,14 @@ services:
     network_mode: host
     restart: unless-stopped
     stop_grace_period: 20s
+    logging:
+      driver: local
+      options:
+        max-size: "7m"
+        max-file: "1"
+        compress: "true"
     environment:
-      SERVER_HOST: 127.0.0.1
+      SERVER_HOST: 0.0.0.0
       SERVER_PORT: 6611
       DATA_DIR: /data
     volumes:

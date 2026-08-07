@@ -27,9 +27,9 @@ RUN mkdir -p /out/data \
     && touch /out/data/.keep \
     && chown -R 65532:65532 /out/data
 
-FROM --platform=$TARGETPLATFORM oven/bun:${BUN_VERSION}-slim AS bun-runtime
+FROM oven/bun:${BUN_VERSION}-slim AS bun-runtime
 
-FROM --platform=$TARGETPLATFORM cloudflare/cloudflared:${CLOUDFLARED_VERSION}
+FROM cloudflare/cloudflared:${CLOUDFLARED_VERSION}
 
 COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=builder --chown=65532:65532 /out/server.js /app/server.js
@@ -39,7 +39,7 @@ COPY --from=builder --chown=65532:65532 /out/data /data
 WORKDIR /app
 
 ENV NODE_ENV=production \
-    SERVER_HOST=127.0.0.1 \
+    SERVER_HOST=0.0.0.0 \
     SERVER_PORT=6611 \
     DATA_DIR=/data \
     FRONTEND_DIR=/app/frontend/dist \
