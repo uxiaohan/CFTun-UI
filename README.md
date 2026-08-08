@@ -24,6 +24,11 @@ docker compose up -d
 
 控制台：<http://127.0.0.1:9911>
 
+### 预览图
+
+![CFTun-UI](CFTun-UI.webp)
+
+
 ## ⚡ Features
 
 | 能力 | 状态 |

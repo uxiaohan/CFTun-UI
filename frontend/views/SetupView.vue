@@ -101,9 +101,9 @@ onMounted(init);
             <h2 class="text-[15px] font-semibold">Cloudflare 账户与 API 令牌</h2>
             <p class="mt-1 text-xs leading-5 text-muted">填写 Account ID 和自定义 API Token。Tunnel Connector Token 将在选择 Tunnel 后自动获取。</p>
             <label class="label mt-5" for="setup-account-id">Account ID</label>
-            <input id="setup-account-id" v-model.trim="accountId" class="field font-mono" autocomplete="off" minlength="16" maxlength="64" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" required autofocus>
+            <input id="setup-account-id" v-model.trim="accountId" class="field font-mono" autocomplete="off" minlength="16" maxlength="64" placeholder="请输入 Account ID" required autofocus>
             <label class="label mt-4" for="setup-token">Cloudflare API Token</label>
-            <input id="setup-token" v-model.trim="token" class="field font-mono" type="password" autocomplete="off" required autofocus>
+            <input id="setup-token" v-model.trim="token" class="field font-mono" type="password" autocomplete="off" placeholder="请输入 API Token" required autofocus>
             <section class="mt-5 rounded-lg border border-black/[.08] bg-black/[.025] p-3.5 text-[11px] leading-5">
               <div class="flex items-center justify-between gap-3"><strong class="text-xs">API Token 所需权限</strong><a class="font-medium text-primary hover:underline" href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noreferrer">创建 Token ↗</a></div>
               <div class="mt-3 grid gap-x-5 gap-y-1 sm:grid-cols-2"><span>账户：Cloudflare Tunnel · 编辑</span><span>账户：Cloudflare Tunnel · 读取</span><span>区域：DNS · 编辑</span><span>区域：DNS · 读取</span><span>区域：区域 · 读取</span></div>
