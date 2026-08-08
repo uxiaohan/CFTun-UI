@@ -168,10 +168,18 @@ function boolean(value: unknown, label: string): boolean { if (typeof value !== 
 function choice<T extends string>(value: unknown, label: string, choices: readonly T[]): T { if (typeof value !== "string" || !choices.includes(value as T)) throw new HttpError(400, `${label} 无效`); return value as T; }
 function numberParam(url: URL, name: string, fallback: number): number { const value = Number(url.searchParams.get(name) ?? fallback); return Number.isFinite(value) ? value : fallback; }
 function assertSameOrigin(request: Request): void {
-  const origin = request.headers.get("origin"); if (!origin) return;
-  const expected = new URL(request.url).origin; if (origin !== expected) throw new HttpError(403, "已拒绝跨域请求");
+  if (!sameHostOrigin(request)) throw new HttpError(403, "已拒绝跨域请求");
 }
-function corsHeaders(request: Request): Record<string, string> { const origin = request.headers.get("origin"); return origin === new URL(request.url).origin ? { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS" } : {}; }
+function sameHostOrigin(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  try { return new URL(origin).host === new URL(request.url).host; }
+  catch { return false; }
+}
+function corsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get("origin");
+  return origin && sameHostOrigin(request) ? { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS", Vary: "Origin" } : {};
+}
 function json(value: unknown, status = 200, headers: Record<string, string> = {}): Response { return Response.json(value, { status, headers: { "Cache-Control": "no-store", ...headers } }); }
 
 class HttpError extends Error { constructor(readonly status: number, message: string) { super(message); } }

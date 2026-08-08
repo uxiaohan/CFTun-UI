@@ -20,6 +20,26 @@ describe("authentication API", () => {
     expect((await app.fetch(jsonRequest("/api/auth/login", { username: "a", password: "123456" }))).status).toBe(200);
   });
 
+  test("allows the same external host across an HTTPS reverse proxy", async () => {
+    db = new AppDatabase(":memory:");
+    const app = createApp({ database: db });
+    const body = { username: "admin", password: "correct-horse-battery" };
+
+    const crossHost = await app.fetch(externalRequest("POST", "https://evil.example", body));
+    expect(crossHost.status).toBe(403);
+    expect(await crossHost.json()).toMatchObject({ error: { message: "已拒绝跨域请求" } });
+
+    const malformed = await app.fetch(externalRequest("POST", "not-an-origin", body));
+    expect(malformed.status).toBe(403);
+
+    const preflight = await app.fetch(externalRequest("OPTIONS", "https://panel.example.com"));
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe("https://panel.example.com");
+
+    const setup = await app.fetch(externalRequest("POST", "https://panel.example.com", body));
+    expect(setup.status).toBe(201);
+  });
+
   test("initializes once, issues HttpOnly cookie, and protects API", async () => {
     db = new AppDatabase(":memory:");
     const app = createApp({ database: db });
@@ -103,4 +123,12 @@ describe("authentication API", () => {
 
 function jsonRequest(path: string, body: unknown, method = "POST", cookie = ""): Request {
   return new Request(`http://localhost${path}`, { method, headers: { "Content-Type": "application/json", Origin: "http://localhost", ...(cookie ? { Cookie: cookie.split(";")[0] ?? "" } : {}) }, body: JSON.stringify(body) });
+}
+
+function externalRequest(method: string, origin: string, body?: unknown): Request {
+  return new Request("http://panel.example.com/api/auth/setup", {
+    method,
+    headers: { "Content-Type": "application/json", Origin: origin },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
 }
