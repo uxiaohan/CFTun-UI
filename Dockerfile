@@ -46,7 +46,7 @@ ENV NODE_ENV=production \
     CLOUDFLARED_PATH=/usr/local/bin/cloudflared \
     BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
 
-USER 65532:65532
+USER 0:0
 
 VOLUME ["/data"]
 
