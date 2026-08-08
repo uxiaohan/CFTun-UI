@@ -11,7 +11,7 @@
   * { box-sizing: border-box; }
   html { @apply bg-canvas; scrollbar-gutter: stable; }
   body { @apply m-0 min-h-screen bg-canvas font-sans text-[#1c1f23] antialiased; background-image: radial-gradient(ellipse 70% 45% at 50% -15%,rgba(94,106,210,.06),transparent 70%); }
-  button,a,input,select,textarea { @apply outline-none; } button,a { -webkit-tap-highlight-color: transparent; } button { font: inherit; }
+  button,a,input,select,textarea { @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1; } button,a { -webkit-tap-highlight-color: transparent; } button { font: inherit; }
   ::selection { background: rgba(94,106,210,.42); }
 }
 @layer components {

@@ -2,6 +2,7 @@ import type { AppDatabase } from "./db.ts";
 
 const COOKIE = "cftun_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 7;
+const SECURE = process.env.SECURE_COOKIES === "true" ? "; Secure" : "";
 
 export class AuthService {
   constructor(private readonly db: AppDatabase) {}
@@ -21,7 +22,7 @@ export class AuthService {
     const id = randomToken();
     const expiresAt = new Date(Date.now() + SESSION_SECONDS * 1000).toISOString();
     this.db.createSession(id, username, expiresAt);
-    return { cookie: `${COOKIE}=${id}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_SECONDS}`, expiresAt };
+    return { cookie: `${COOKIE}=${id}; Path=/; HttpOnly; SameSite=Strict${SECURE}; Max-Age=${SESSION_SECONDS}`, expiresAt };
   }
 
   async update(username: string, currentPassword: string, password: string): Promise<void> {
@@ -36,7 +37,7 @@ export class AuthService {
   authenticate(request: Request): { username: string; sessionId: string } | null {
     const raw = request.headers.get("cookie")?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${COOKIE}=`));
     const sessionId = raw?.slice(COOKIE.length + 1);
-    if (!sessionId) return null;
+    if (!sessionId || !/^[A-Za-z0-9_-]+$/.test(sessionId)) return null;
     const session = this.db.session(sessionId);
     return session ? { username: session.username, sessionId } : null;
   }
@@ -44,7 +45,7 @@ export class AuthService {
   logout(request: Request): string {
     const auth = this.authenticate(request);
     if (auth) this.db.deleteSession(auth.sessionId);
-    return `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`;
+    return `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict${SECURE}; Max-Age=0`;
   }
 }
 

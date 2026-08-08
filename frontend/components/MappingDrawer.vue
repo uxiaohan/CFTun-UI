@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
 import { useScrollLock } from "../composables/useScrollLock";
+import { useFocusTrap } from "../composables/useFocusTrap";
 import type { CloudflareChoice, Mapping, MappingInput, MappingTestResult, Operation } from "../types";
 import SelectMenu from "./SelectMenu.vue";
 
 const props = withDefaults(defineProps<{ open: boolean; mapping?: Mapping | null; zones: CloudflareChoice[]; defaultZoneId?: string; zonesLoading?: boolean; saving?: boolean; testing?: boolean; serverError?: string; testResult?: MappingTestResult | null; operation?: Operation | null; displayStage?: string }>(), { mapping: null, defaultZoneId: "", zonesLoading: false, saving: false, testing: false, serverError: "", testResult: null, operation: null, displayStage: "" });
 const emit = defineEmits<{ close: []; save: [input: MappingInput]; test: [input: MappingInput] }>();
-const panel = ref<HTMLElement | null>(null); const form = ref<HTMLFormElement | null>(null); const setLocked = useScrollLock(); const errors = reactive<Record<string, string>>({}); let previous: HTMLElement | null = null;
+const panel = ref<HTMLElement | null>(null); const form = ref<HTMLFormElement | null>(null); const setLocked = useScrollLock(); const errors = reactive<Record<string, string>>({});
+const busy = () => props.saving || props.testing;
+function close() { if (!busy()) emit("close"); }
+const { activate, deactivate } = useFocusTrap(panel, busy, close);
 const draft = reactive({ zoneId: "", subdomain: "", path: "", targetType: "host" as "host"|"lan", protocol: "http" as "http"|"https", targetHost: "", targetPort: "", enabled: true, noTLSVerify: false });
 const selectedZone = computed(() => props.zones.find((zone) => zone.id === draft.zoneId));
 const zoneName = computed(() => selectedZone.value?.name || props.mapping?.zoneName || "");
@@ -25,10 +29,8 @@ function action(kind: "save"|"test"): void {
   if (kind === "save") emit("save", input);
   else emit("test", input);
 }
-function close(): void { if (!props.saving && !props.testing) emit("close"); }
-function keydown(event: KeyboardEvent): void { if (event.key === "Escape") { event.preventDefault(); close(); return; } if (event.key !== "Tab" || !panel.value) return; const items = [...panel.value.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])')]; const first = items[0], last = items.at(-1); if (!first || !last) return; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }
-watch(() => props.open, async (open) => { if (open) { reset(); previous = document.activeElement as HTMLElement | null; setLocked(true); document.addEventListener("keydown", keydown); await nextTick(); panel.value?.querySelector<HTMLElement>("input")?.focus(); } else { setLocked(false); document.removeEventListener("keydown", keydown); previous?.focus(); } });
-watch(() => props.mapping, reset); watch(() => props.zones, () => { if (props.open) reset(); }); onBeforeUnmount(() => document.removeEventListener("keydown", keydown));
+watch(() => props.open, async (open) => { if (open) { reset(); setLocked(true); activate("input"); } else { setLocked(false); deactivate(); } });
+watch(() => props.mapping, reset); watch(() => props.zones, () => { if (props.open) reset(); });
 </script>
 
 <template>

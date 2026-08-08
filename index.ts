@@ -21,18 +21,18 @@ const server = Bun.serve({ hostname, port, fetch: async (request) => {
 console.log(startupBanner(hostname, port));
 
 if (app.db.getSetting("connector_auto_start") === "true" && app.db.getSetting("setup_completed") === "true") {
-  void app.connector.start();
+  void app.connector.start().catch((e) => console.error("Auto-start connector failed:", e));
 }
 
 let shuttingDown = false;
 async function shutdown(): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  server.stop(false);
+  server.stop(true);
   await app.connector.stop();
   app.db.close();
   process.exit(0);
 }
 
-process.on("SIGTERM", () => void shutdown());
-process.on("SIGINT", () => void shutdown());
+process.on("SIGTERM", () => { shutdown().catch((e) => console.error("Shutdown error:", e)); });
+process.on("SIGINT", () => { shutdown().catch((e) => console.error("Shutdown error:", e)); });

@@ -5,12 +5,10 @@ export async function testOrigin(input: MappingInput, zoneName: string, timeoutM
   const target = validateMapping(input, zoneName);
   const started = performance.now();
   try {
-    let timedOut = false;
-    const connection = Bun.connect({ hostname: target.targetHost, port: input.targetPort, socket: { data() {}, open(socket) { socket.end(); }, error() {} } });
-    const timeout = Bun.sleep(timeoutMs).then(() => { timedOut = true; throw new Error("TCP 连接超时"); });
-    const socket = await Promise.race([connection, timeout]);
+    const connectPromise = Bun.connect({ hostname: target.targetHost, port: input.targetPort, socket: { data() {}, open(socket) { socket.end(); }, error() {} } });
+    const timeoutPromise = Bun.sleep(timeoutMs).then(() => { connectPromise.then((s) => s.terminate()).catch(() => {}); throw new Error("TCP 连接超时"); });
+    const socket = await Promise.race([connectPromise, timeoutPromise]);
     socket.end();
-    if (timedOut) socket.terminate();
   } catch (error) {
     return { ok: false, tcp: false, http: false, category: classify(error), message: errorMessage(error), durationMs: Math.round(performance.now() - started) };
   }

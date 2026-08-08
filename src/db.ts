@@ -103,7 +103,7 @@ export class AppDatabase {
 
   replaceTunnelMappings(tunnelId: string, mappings: MappingRecord[]): void {
     this.sqlite.transaction(() => {
-      this.sqlite.query("DELETE FROM mappings").run();
+      this.sqlite.query("DELETE FROM mappings WHERE tunnel_id = ?").run(tunnelId);
       for (const mapping of mappings) this.saveMapping(mapping);
     })();
   }
@@ -111,7 +111,7 @@ export class AppDatabase {
   deleteMapping(id: string): void { this.sqlite.query("DELETE FROM mappings WHERE id=?").run(id); }
 
   createOperation(action: string, mappingId?: string, requestedId?: string): string {
-    const id = requestedId && /^[0-9a-f-]{36}$/i.test(requestedId) ? requestedId : crypto.randomUUID(); const now = new Date().toISOString();
+    const id = requestedId && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedId) ? requestedId : crypto.randomUUID(); const now = new Date().toISOString();
     this.sqlite.query("INSERT INTO operations VALUES(?,?,?,?,?,?,?,?,?)").run(id, action, mappingId ?? null, "running", "validate", null, null, now, now);
     this.pruneOperations();
     return id;
@@ -131,7 +131,10 @@ export class AppDatabase {
     return this.sqlite.query("SELECT id,action,mapping_id AS mappingId,status,stage,message,details_json AS details,created_at AS createdAt,updated_at AS updatedAt FROM operations WHERE id=?").get(id);
   }
 
+  private operationCount = 0;
+
   private pruneOperations(): void {
+    if (++this.operationCount % 50 !== 0) return;
     this.sqlite.exec(`
       DELETE FROM operations WHERE id IN (
         SELECT id FROM operations ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET 500
@@ -155,7 +158,9 @@ function boundedText(value: string | undefined, maxBytes: number): string | null
   if (value === undefined) return null;
   const bytes = new TextEncoder().encode(value);
   if (bytes.byteLength <= maxBytes) return value;
-  const suffix = "…[已截断]"; let prefix = new TextDecoder().decode(bytes.slice(0, maxBytes - 16));
+  const suffix = "…[已截断]";
+  const suffixBytes = new TextEncoder().encode(suffix).byteLength;
+  let prefix = new TextDecoder().decode(bytes.slice(0, maxBytes - suffixBytes));
   while (prefix && new TextEncoder().encode(prefix + suffix).byteLength > maxBytes) prefix = prefix.slice(0, -1);
   return prefix + suffix;
 }
@@ -174,6 +179,7 @@ function rowToMapping(row: Record<string, unknown>): MappingRecord {
     tunnelId: String(row.tunnel_id), zoneId: String(row.zone_id), zoneName: String(row.zone_name), dnsRecordId: row.dns_record_id ? String(row.dns_record_id) : null,
     rawRule: JSON.parse(String(row.raw_rule_json ?? "{}")) as Record<string, unknown>, ruleOrder: Number(row.rule_order),
     syncStatus: row.sync_status as MappingRecord["syncStatus"], enabled: Boolean(row.enabled),
-    createdAt: String(row.created_at), updatedAt: String(row.updated_at), ...options,
+    createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+    noTLSVerify: options.noTLSVerify, originServerName: options.originServerName, httpHostHeader: options.httpHostHeader,
   };
 }

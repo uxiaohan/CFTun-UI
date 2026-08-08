@@ -2,9 +2,11 @@
 import type { Mapping } from "../types";
 import StatusBadge from "./StatusBadge.vue";
 
+const dateFormatter = new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
 withDefaults(defineProps<{ mappings: Mapping[]; loading?: boolean; filtered?: boolean; compact?: boolean }>(), { loading: false, filtered: false, compact: false });
 const emit = defineEmits<{ create: []; edit: [mapping: Mapping]; delete: [mapping: Mapping]; test: [mapping: Mapping] }>();
-function formattedDate(value: string): string { const date = new Date(value); return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date); }
+function formattedDate(value: string): string { const date = new Date(value); return Number.isNaN(date.getTime()) ? "" : dateFormatter.format(date); }
 </script>
 
 <template>

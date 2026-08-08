@@ -20,7 +20,7 @@ const state = reactive<AppState>({ initialized: false, bootstrapping: false, aut
 let toastId = 0;
 const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
-function clearSession(): void { state.authenticated = false; state.username = ""; state.setup = null; }
+function clearSession(): void { state.authenticated = false; state.username = ""; state.setup = null; state.publicStatus = null; state.connector = null; }
 onUnauthorized(clearSession);
 export function messageFor(error: unknown, fallback = "操作失败，请稍后重试"): string { return error instanceof Error ? error.message : fallback; }
 

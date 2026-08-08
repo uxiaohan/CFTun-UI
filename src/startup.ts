@@ -17,7 +17,7 @@ export function startupBanner(host: string, port: number, now = new Date(), inte
     "============================================================",
     "🚇 CFTun-UI 启动成功",
     "",
-    `🕒 当前时间: ${formatStartupTime(now)} (Asia/Shanghai)`,
+    `🕒 当前时间: ${formatStartupTime(now)} (${process.env.TZ ?? Intl.DateTimeFormat().resolvedOptions().timeZone})`,
     `🔗 GitHub: ${GITHUB_URL}`,
     "",
     "🌐 WEB 控制台:",
@@ -45,8 +45,9 @@ export function consoleUrls(host: string, port: number, interfaces: NetworkMap):
 }
 
 export function formatStartupTime(date: Date): string {
+  const tz = process.env.TZ ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
   }).formatToParts(date);
   const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";

@@ -5,7 +5,7 @@ import type {
   MappingTestResult, Operation, PublicStatus, SetupStatus,
 } from "./types";
 
-type ErrorPayload = { error?: string | { message?: string } };
+type ErrorPayload = { error?: string | { message?: string }; [key: string]: unknown };
 let unauthorizedHandler: (() => void) | undefined;
 
 export class ApiError extends Error {

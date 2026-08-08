@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useScrollLock } from "../composables/useScrollLock";
+import { useFocusTrap } from "../composables/useFocusTrap";
 const props = withDefaults(defineProps<{ open: boolean; title: string; description: string; confirmLabel?: string; busy?: boolean }>(), { confirmLabel: "确认", busy: false });
-const emit = defineEmits<{ confirm: []; cancel: [] }>(); const panel = ref<HTMLElement | null>(null); const setLocked = useScrollLock(); let previous: HTMLElement | null = null;
+const emit = defineEmits<{ confirm: []; cancel: [] }>();
+const panel = ref<HTMLElement | null>(null);
+const setLocked = useScrollLock();
+const busyRef = computed(() => props.busy);
 function cancel() { if (!props.busy) emit("cancel"); }
-function keydown(event: KeyboardEvent) { if (event.key === "Escape") { event.preventDefault(); cancel(); return; } if (event.key !== "Tab" || !panel.value) return; const items = [...panel.value.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])')]; const first = items[0], last = items.at(-1); if (!first || !last) return; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }
-watch(() => props.open, async (open) => { if (open) { previous = document.activeElement as HTMLElement | null; setLocked(true); document.addEventListener("keydown", keydown); await nextTick(); panel.value?.querySelector<HTMLButtonElement>(".cancel")?.focus(); } else { setLocked(false); document.removeEventListener("keydown", keydown); previous?.focus(); } });
-onBeforeUnmount(() => document.removeEventListener("keydown", keydown));
+const { activate, deactivate } = useFocusTrap(panel, busyRef, cancel);
+watch(() => props.open, (open) => {
+  if (open) { setLocked(true); activate(".cancel"); }
+  else { setLocked(false); deactivate(); }
+});
 </script>
 <template><Teleport to="body"><Transition name="fade"><div v-if="open" class="fixed inset-0 z-[80] grid place-items-center p-4"><div class="absolute inset-0 bg-[#111827]/30 backdrop-blur-[1px]" @click="cancel"/><section ref="panel" class="relative w-full max-w-[400px] rounded-xl border border-black/[.1] bg-white p-5 shadow-2xl" role="alertdialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="dialog-description"><div class="flex gap-3.5"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-red-500/[.08] font-semibold text-red-600">!</span><div><h2 id="dialog-title" class="text-[15px] font-semibold">{{ title }}</h2><p id="dialog-description" class="mt-1.5 text-xs leading-5 text-muted">{{ description }}</p><slot /></div></div><footer class="mt-5 flex justify-end gap-2 border-t border-black/[.06] pt-4"><button class="btn-secondary cancel" type="button" :disabled="busy" @click="cancel">取消</button><button class="inline-flex h-9 min-w-24 items-center justify-center gap-2 rounded-md bg-red-600 px-3.5 text-[13px] font-medium text-white disabled:opacity-45" type="button" :disabled="busy" @click="emit('confirm')"><span v-if="busy" class="spinner"/>{{ busy ? "正在处理" : confirmLabel }}</button></footer></section></div></Transition></Teleport></template>

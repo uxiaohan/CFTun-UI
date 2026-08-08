@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useScrollLock } from "../composables/useScrollLock";
+import { useFocusTrap } from "../composables/useFocusTrap";
 
 const props = withDefaults(defineProps<{
   open: boolean;
@@ -16,47 +17,17 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ close: []; submit: [] }>();
 const panel = ref<HTMLElement | null>(null);
 const setLocked = useScrollLock();
-let previous: HTMLElement | null = null;
+const busyRef = computed(() => props.busy);
 
 function close(): void {
   if (!props.busy) emit("close");
 }
+const { activate, deactivate } = useFocusTrap(panel, busyRef, close);
 
-function keydown(event: KeyboardEvent): void {
-  if (event.key === "Escape") {
-    event.preventDefault();
-    close();
-    return;
-  }
-  if (event.key !== "Tab" || !panel.value) return;
-  const items = [...panel.value.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')];
-  const first = items[0];
-  const last = items.at(-1);
-  if (!first || !last) return;
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-}
-
-watch(() => props.open, async (open) => {
-  if (open) {
-    previous = document.activeElement as HTMLElement | null;
-    setLocked(true);
-    document.addEventListener("keydown", keydown);
-    await nextTick();
-    panel.value?.querySelector<HTMLElement>("input,select,textarea,button")?.focus();
-  } else {
-    setLocked(false);
-    document.removeEventListener("keydown", keydown);
-    previous?.focus();
-  }
+watch(() => props.open, (open) => {
+  if (open) { setLocked(true); activate("input,select,textarea,button"); }
+  else { setLocked(false); deactivate(); }
 });
-
-onBeforeUnmount(() => document.removeEventListener("keydown", keydown));
 </script>
 
 <template>

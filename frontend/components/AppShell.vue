@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 import { useAppState } from "../state";
 import { useScrollLock } from "../composables/useScrollLock";
@@ -19,12 +19,18 @@ const nav = [
 const title = computed(() => nav.find((item) => item.to === route.path)?.label || "控制台");
 const username = computed(() => state.username || "管理员");
 
+function onKeydown(event: KeyboardEvent): void {
+  if (event.key === "Escape" && drawer.value) drawer.value = false;
+}
+onMounted(() => document.addEventListener("keydown", onKeydown));
+onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
+
 watch(() => route.path, () => { drawer.value = false; });
 watch(drawer, (open) => setLocked(open));
 </script>
 
 <template>
-  <div class="min-h-screen bg-canvas" @keydown.esc="drawer = false">
+  <div class="min-h-screen bg-canvas">
     <a href="#main-content" class="fixed left-3 top-3 z-[90] -translate-y-20 rounded-md bg-primary px-3 py-2 text-xs text-white focus:translate-y-0">跳到主要内容</a>
     <header class="fixed inset-x-0 top-0 z-30 flex h-14 items-center border-b border-black/[.08] bg-canvas/90 px-4 backdrop-blur-xl lg:left-60">
       <button class="icon-btn mr-2 lg:hidden" type="button" aria-label="打开导航菜单" :aria-expanded="drawer" @click="drawer = true">☰</button>

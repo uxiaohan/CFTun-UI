@@ -32,9 +32,9 @@ FROM oven/bun:${BUN_VERSION}-slim AS bun-runtime
 FROM cloudflare/cloudflared:${CLOUDFLARED_VERSION}
 
 COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
-COPY --from=builder --chown=65532:65532 /out/server.js /app/server.js
-COPY --from=builder --chown=65532:65532 /build/frontend/dist /app/frontend/dist
-COPY --from=builder --chown=65532:65532 /out/data /data
+COPY --from=builder /out/server.js /app/server.js
+COPY --from=builder /build/frontend/dist /app/frontend/dist
+COPY --from=builder /out/data /data
 
 WORKDIR /app
 

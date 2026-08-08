@@ -11,7 +11,15 @@ export interface AppOptions { database?: AppDatabase; cloudflareBaseUrl?: string
 export function createApp(options: AppOptions = {}): { fetch(request: Request): Promise<Response>; db: AppDatabase; connector: ConnectorManager } {
   const db = options.database ?? new AppDatabase();
   const auth = new AuthService(db);
-  const cloudflare = (token = db.getSetting("cloudflare_api_token")) => new CloudflareClient(token ?? "", options.cloudflareBaseUrl);
+  const cloudflare = (() => {
+    let cached: CloudflareClient | null = null;
+    let cachedToken = "";
+    return (token = db.getSetting("cloudflare_api_token")) => {
+      const t = token ?? "";
+      if (!cached || cachedToken !== t) { cached = new CloudflareClient(t, options.cloudflareBaseUrl); cachedToken = t; }
+      return cached;
+    };
+  })();
   const connector = options.connector ?? new ConnectorManager(() => db.settings());
   const mappings = new MappingService(db, cloudflare);
 
@@ -154,7 +162,8 @@ function connectorSettings(db: AppDatabase): JsonObject {
 }
 
 async function bodyObject(request: Request): Promise<JsonObject> {
-  if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) throw new HttpError(415, "请求内容类型必须是 application/json");
+  const ct = request.headers.get("content-type")?.split(";")[0]?.trim();
+  if (ct !== "application/json") throw new HttpError(415, "请求内容类型必须是 application/json");
   try { const body = await request.json(); if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error(); return body as JsonObject; }
   catch { throw new HttpError(400, "请求中的 JSON 数据格式无效"); }
 }
@@ -184,9 +193,10 @@ function json(value: unknown, status = 200, headers: Record<string, string> = {}
 
 class HttpError extends Error { constructor(readonly status: number, message: string) { super(message); } }
 function errorResponse(error: unknown): Response {
-  if (error instanceof HttpError) return json({ error: { code: "BAD_REQUEST", message: error.message } }, error.status);
+  if (error instanceof HttpError) {
+    const code = error.status === 403 ? "FORBIDDEN" : error.status === 409 ? "CONFLICT" : error.status === 415 ? "UNSUPPORTED_MEDIA_TYPE" : "BAD_REQUEST";
+    return json({ error: { code, message: error.message } }, error.status);
+  }
   if (error instanceof CloudflareError) return json({ error: { code: "CLOUDFLARE_ERROR", message: error.message, details: error.errors } }, 502);
-  const message = error instanceof Error ? error.message : "服务器内部错误";
-  const expected = /不存在|无效|必须|需要|尚未|已经|初始化|不能|错误|失败|冲突|修改|配置|超时|区域|域名|端口|协议|密码|用户名|Token/i.test(message);
-  return json({ error: { code: expected ? "INVALID_OPERATION" : "INTERNAL_ERROR", message: expected ? message : "服务器内部错误" } }, expected ? 400 : 500);
+  return json({ error: { code: "INTERNAL_ERROR", message: "服务器内部错误" } }, 500);
 }

@@ -140,7 +140,15 @@ export class MappingService {
     const records = await cf.dnsRecords(zoneId, { "name.exact": hostname, match: "all" });
     if (records.some((record) => !dnsPointsToTunnel(record, hostname, tunnelId))) throw new Error("该域名已有 DNS 记录，并且没有指向当前 Tunnel");
     const owned = records.find((record) => dnsPointsToTunnel(record, hostname, tunnelId));
-    return String(owned ? (await cf.updateDns(zoneId, String(owned.id), body)).id : (await cf.createDns(zoneId, body)).id);
+    try {
+      return String(owned ? (await cf.updateDns(zoneId, String(owned.id), body)).id : (await cf.createDns(zoneId, body)).id);
+    } catch (error) {
+      if (owned) throw error;
+      const retry = await cf.dnsRecords(zoneId, { "name.exact": hostname, match: "all" });
+      const conflict = retry.find((record) => dnsPointsToTunnel(record, hostname, tunnelId));
+      if (conflict) return String((await cf.updateDns(zoneId, String(conflict.id), body)).id);
+      throw error;
+    }
   }
 
   private async deleteDnsIfOwned(cf: CloudflareClient, mapping: MappingRecord): Promise<boolean> {

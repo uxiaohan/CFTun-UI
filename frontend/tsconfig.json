@@ -5,7 +5,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "moduleDetection": "force",
-    "types": ["vite/client", "node"],
+    "types": ["vite/client"],
     "jsx": "preserve",
     "allowJs": false,
     "allowImportingTsExtensions": true,

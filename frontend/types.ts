@@ -3,7 +3,7 @@ export type ConnectorState = "stopped" | "starting" | "running" | "stopping" | "
 export type ToastKind = "success" | "error" | "info";
 
 export interface PublicStatus {
-  ok: true;
+  ok: boolean;
   authConfigured: boolean;
   setupCompleted: boolean;
   connector: ConnectorSnapshot;
@@ -81,18 +81,18 @@ export interface MappingTestResult {
   ok: boolean;
   tcp: boolean;
   http: boolean;
-  category: "responded" | "timeout" | "tls_error" | "dns_error" | "unreachable" | string;
+  category: "responded" | "timeout" | "tls_error" | "dns_error" | "unreachable";
   message?: string;
   durationMs: number;
   status?: number;
 }
 
-export type OperationStage = "validate" | "old_ingress" | "ingress" | "dns" | "database" | "complete" | "failed" | string;
+export type OperationStage = "validate" | "old_ingress" | "ingress" | "dns" | "database" | "complete" | "failed";
 export interface Operation {
   id: Id;
-  action: "create_mapping" | "update_mapping" | "delete_mapping" | string;
+  action: "create_mapping" | "update_mapping" | "delete_mapping";
   mappingId: Id | null;
-  status: "running" | "succeeded" | "failed" | string;
+  status: "running" | "succeeded" | "failed";
   stage: OperationStage;
   message: string | null;
   details: string | null;
