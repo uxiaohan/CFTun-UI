@@ -14,6 +14,7 @@ export interface LoginCredentials { username: string; password: string }
 
 export interface SetupStatus {
   tokenConfigured: boolean;
+  apiToken: string | null;
   accountId: string | null;
   tunnelId: string | null;
   tunnelName: string | null;

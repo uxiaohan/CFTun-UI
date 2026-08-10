@@ -212,7 +212,7 @@ function connectorEvents(connector: ConnectorManager, signal: AbortSignal): Resp
 
 function publicSetup(db: AppDatabase): JsonObject {
   const settings = db.settings();
-  return { tokenConfigured: Boolean(settings.cloudflare_api_token), accountId: settings.account_id ?? null, tunnelId: settings.tunnel_id ?? null, tunnelName: settings.tunnel_name ?? null, tunnelTokenConfigured: Boolean(settings.tunnel_token), completed: settings.setup_completed === "true", connectorAutoStart: settings.connector_auto_start === "true", connectorProtocol: settings.connector_protocol ?? "auto", connectorEdgeIpVersion: settings.connector_edge_ip_version ?? "auto" };
+  return { tokenConfigured: Boolean(settings.cloudflare_api_token), apiToken: settings.cloudflare_api_token ?? null, accountId: settings.account_id ?? null, tunnelId: settings.tunnel_id ?? null, tunnelName: settings.tunnel_name ?? null, tunnelTokenConfigured: Boolean(settings.tunnel_token), completed: settings.setup_completed === "true", connectorAutoStart: settings.connector_auto_start === "true", connectorProtocol: settings.connector_protocol ?? "auto", connectorEdgeIpVersion: settings.connector_edge_ip_version ?? "auto" };
 }
 
 function connectorSettings(db: AppDatabase): JsonObject {

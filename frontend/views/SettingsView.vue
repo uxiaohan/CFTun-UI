@@ -11,6 +11,7 @@ import type { ConnectorSettingsInput } from "../types";
 const { state, logout, notify, refresh, setConnector } = useAppState();
 const setup = computed(() => state.setup);
 const apiToken = ref("");
+const apiTokenVisible = ref(false);
 const accountId = ref("");
 const tokenBusy = ref(false);
 const confirmAccountChange = ref(false);
@@ -23,6 +24,7 @@ const credentialErrors = reactive({ username: "", currentPassword: "", password:
 const connectorSettings = reactive<ConnectorSettingsInput>({ autoStart: true, protocol: "auto", edgeIpVersion: "auto" });
 
 watch(() => setup.value?.accountId, (value) => { accountId.value = value || ""; }, { immediate: true });
+watch(() => setup.value?.apiToken, (value) => { apiToken.value = value || ""; }, { immediate: true });
 watch(() => setup.value, (value) => {
   if (!value) return;
   connectorSettings.autoStart = value.connectorAutoStart;
@@ -86,6 +88,7 @@ async function saveCloudflare(): Promise<void> {
   try {
     const result = await apiClient.updateCloudflare({ accountId: accountId.value.trim(), token: apiToken.value });
     apiToken.value = "";
+    apiTokenVisible.value = false;
     const message = result.accountChanged ? "Account 已切换，本地绑定和映射已清空，请重新完成设置"
       : result.tunnelInvalidated ? "Cloudflare 凭据已更新，但原 Tunnel 已不存在，请重新选择 Tunnel"
       : "Cloudflare 凭据和 Tunnel Token 已更新";
@@ -129,7 +132,7 @@ async function saveConnector(): Promise<void> {
         <form class="p-5" @submit.prevent="requestCloudflareSave">
           <div class="grid gap-4 sm:grid-cols-2">
             <div><label class="label" for="settings-account-id">Account ID</label><input id="settings-account-id" v-model.trim="accountId" class="field font-mono" autocomplete="off" minlength="16" maxlength="64" required></div>
-            <div><label class="label" for="settings-api-token">新 API Token</label><input id="settings-api-token" v-model.trim="apiToken" class="field font-mono" type="password" autocomplete="off" required></div>
+            <div><label class="label" for="settings-api-token">API Token</label><div class="relative"><input id="settings-api-token" v-model.trim="apiToken" class="field pr-16 font-mono" :type="apiTokenVisible ? 'text' : 'password'" autocomplete="off" autocapitalize="none" spellcheck="false" required><button class="absolute inset-y-0 right-0 px-3 text-xs font-medium text-primary hover:text-primary-hover" type="button" :aria-label="apiTokenVisible ? '隐藏 API Token' : '显示 API Token'" :aria-pressed="apiTokenVisible" @click="apiTokenVisible = !apiTokenVisible">{{ apiTokenVisible ? "隐藏" : "显示" }}</button></div></div>
           </div>
           <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-black/[.06] pt-4">
             <div class="flex min-w-0 items-center gap-3"><StatusBadge :status="setup?.tokenConfigured ? 'running' : 'stopped'" :label="setup?.tokenConfigured ? 'Token 已配置' : 'Token 未配置'" /><span class="truncate text-[11px] text-muted" :title="setup?.tunnelId || undefined">Tunnel · {{ setup?.tunnelName || setup?.tunnelId || "未设置" }}</span></div>

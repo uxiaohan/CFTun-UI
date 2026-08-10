@@ -58,6 +58,9 @@ describe("authentication API", () => {
     const cookie = login.headers.get("set-cookie") ?? "";
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("SameSite=Strict");
+    const setupStatus = await app.fetch(new Request("http://localhost/api/setup", { headers: { Cookie: cookie.split(";")[0] ?? "" } }));
+    expect(setupStatus.headers.get("cache-control")).toBe("no-store");
+    expect(await setupStatus.json()).toMatchObject({ tokenConfigured: false, apiToken: null, completed: false });
     const me = await app.fetch(new Request("http://localhost/api/auth/me", { headers: { Cookie: cookie.split(";")[0] ?? "" } }));
     expect(me.status).toBe(200);
     expect(await me.json()).toMatchObject({ authenticated: true, username: "admin" });
@@ -99,6 +102,10 @@ describe("authentication API", () => {
       expect(await token.json()).toMatchObject({ verified: true, accountId, zoneCount: 1, checks: { tunnelRead: true, zoneRead: true, dnsRead: true } });
       expect(db.getSetting("account_id")).toBe(accountId);
       expect(db.getSetting("cloudflare_api_token")).toBe("cloudflare-api-token");
+
+      const setupStatus = await app.fetch(new Request("http://localhost/api/setup", { headers: { Cookie: cookie.split(";")[0] ?? "" } }));
+      expect(setupStatus.headers.get("cache-control")).toBe("no-store");
+      expect(await setupStatus.json()).toMatchObject({ tokenConfigured: true, accountId, apiToken: "cloudflare-api-token" });
 
       const zones = await app.fetch(new Request("http://localhost/api/cloudflare/zones", { headers: { Cookie: cookie.split(";")[0] ?? "" } }));
       expect(zones.status).toBe(200);
