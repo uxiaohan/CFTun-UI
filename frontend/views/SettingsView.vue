@@ -16,11 +16,10 @@ const accountId = ref("");
 const tokenBusy = ref(false);
 const confirmAccountChange = ref(false);
 const connectorBusy = ref(false);
-const tunnelDialogOpen = ref(false);
 const tunnels = ref<CloudflareChoice[]>([]);
-const selectedTunnelId = ref("");
 const tunnelsLoading = ref(false);
 const tunnelSwitchBusy = ref(false);
+const switchingTunnelId = ref("");
 const createTunnelOpen = ref(false);
 const createTunnelName = ref("");
 const createTunnelBusy = ref(false);
@@ -44,8 +43,6 @@ const sortedTunnels = computed(() => tunnels.value
     return a.index - b.index;
   })
   .map(({ tunnel }) => tunnel));
-const tunnelOptions = computed(() => sortedTunnels.value.map((tunnel) => ({ value: tunnel.id, label: `${tunnel.name}${tunnel.id === setup.value?.tunnelId ? "（当前）" : ""}` })));
-const tunnelSwitchDisabled = computed(() => tunnelsLoading.value || !selectedTunnelId.value || selectedTunnelId.value === setup.value?.tunnelId);
 let tunnelRefreshTimer: number | undefined;
 
 watch(() => setup.value?.accountId, (value) => { accountId.value = value || ""; }, { immediate: true });
@@ -181,18 +178,18 @@ async function deleteTunnel(): Promise<void> {
   finally { deleteTunnelBusy.value = false; }
 }
 
-async function switchTunnel(): Promise<void> {
-  if (!selectedTunnelId.value || selectedTunnelId.value === setup.value?.tunnelId) return;
-  tunnelSwitchBusy.value = true;
+async function switchTunnel(tunnelId: string): Promise<void> {
+  if (!tunnelId || tunnelId === setup.value?.tunnelId || tunnelSwitchBusy.value) return;
+  tunnelSwitchBusy.value = true; switchingTunnelId.value = tunnelId;
   try {
-    const result = await apiClient.switchTunnel(selectedTunnelId.value);
-    setConnector(result.connector); tunnelDialogOpen.value = false;
+    const result = await apiClient.switchTunnel(tunnelId);
+    setConnector(result.connector);
     await refresh();
     await loadTunnels(true);
     if (result.connectorError) notify(`已切换到 ${result.tunnel.name}，但 Connector 启动失败：${result.connectorError}`, "error", 9000);
     else notify(`已切换到 ${result.tunnel.name}，同步 ${result.sync.imported} 条映射`, "success", 7000);
   } catch (error) { notify(messageFor(error, "切换 Tunnel 失败"), "error"); }
-  finally { tunnelSwitchBusy.value = false; }
+  finally { tunnelSwitchBusy.value = false; switchingTunnelId.value = ""; }
 }
 
 onMounted(() => { void loadTunnels(); tunnelRefreshTimer = window.setInterval(() => void loadTunnels(true), 10_000); });
@@ -235,7 +232,7 @@ onBeforeUnmount(() => { if (tunnelRefreshTimer) clearInterval(tunnelRefreshTimer
         <ul v-else class="divide-y divide-black/[.06]">
           <li v-for="tunnel in sortedTunnels" :key="tunnel.id" class="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
             <div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><span class="truncate text-[13px] font-medium">{{ tunnel.name }}</span><span v-if="tunnel.id === setup?.tunnelId" class="rounded-full bg-primary/[.1] px-2 py-0.5 text-[10px] font-medium text-primary">当前使用</span><span v-else class="rounded-full bg-black/[.05] px-2 py-0.5 text-[10px] text-muted">未使用</span></div><p class="mt-1 truncate font-mono text-[10px] text-muted" :title="tunnel.id">{{ tunnel.id }}</p></div>
-            <div class="flex items-center gap-4"><span class="flex items-center gap-1.5 text-[11px] text-muted"><span class="h-2 w-2 rounded-full" :class="tunnelStatus(tunnel).dot" />{{ tunnelStatus(tunnel).label }}</span><div class="flex gap-2"><button class="btn-secondary" type="button" :disabled="tunnel.id === setup?.tunnelId || tunnelSwitchBusy || deleteTunnelBusy" @click="selectedTunnelId=tunnel.id; tunnelDialogOpen=true">切换</button><button class="h-9 rounded-md px-3 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40" type="button" :disabled="tunnel.id === setup?.tunnelId || tunnelSwitchBusy || deleteTunnelBusy" @click="deleteTunnelTarget=tunnel">删除</button></div></div>
+            <div class="flex items-center gap-4"><span class="flex items-center gap-1.5 text-[11px] text-muted"><span class="h-2 w-2 rounded-full" :class="tunnelStatus(tunnel).dot" />{{ tunnelStatus(tunnel).label }}</span><div class="flex gap-2"><button class="btn-secondary" type="button" :disabled="tunnel.id === setup?.tunnelId || tunnelSwitchBusy || deleteTunnelBusy" @click="switchTunnel(tunnel.id)"><span v-if="switchingTunnelId === tunnel.id" class="spinner" />{{ switchingTunnelId === tunnel.id ? "切换中" : "切换" }}</button><button class="h-9 rounded-md px-3 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40" type="button" :disabled="tunnel.id === setup?.tunnelId || tunnelSwitchBusy || deleteTunnelBusy" @click="deleteTunnelTarget=tunnel">删除</button></div></div>
           </li>
         </ul>
       </section>
@@ -303,13 +300,6 @@ onBeforeUnmount(() => { if (tunnelRefreshTimer) clearInterval(tunnelRefreshTimer
   <ConfirmDialog :open="confirmAccountChange" title="切换 Cloudflare Account？" description="确认后会清空当前实例的本地 Tunnel 绑定和映射，并返回初始化流程。Cloudflare 上的 Tunnel、Ingress 和 DNS 等远端资源不会被删除。" confirm-label="确认切换" :busy="tokenBusy" @cancel="confirmAccountChange=false" @confirm="saveCloudflare" />
   <FormDialog :open="createTunnelOpen" title="新增 Tunnel" description="创建 remotely-managed Tunnel。创建后不会自动切换。" submit-label="创建 Tunnel" :busy="createTunnelBusy" :submit-disabled="!createTunnelName.trim()" @close="createTunnelOpen=false; createTunnelName=''" @submit="createTunnel">
     <label class="label" for="new-tunnel-name">Tunnel 名称</label><input id="new-tunnel-name" v-model.trim="createTunnelName" class="field" minlength="1" maxlength="100" pattern="[A-Za-z0-9_. -]+" autocomplete="off" required><p class="mt-2 text-[10px] text-muted">支持字母、数字、空格、点、下划线和短横线。</p>
-  </FormDialog>
-  <FormDialog :open="tunnelDialogOpen" title="切换 Tunnel" description="将停止当前 Connector，同步新 Tunnel 的远端 Ingress，并替换本地映射列表。旧 Tunnel、Ingress 和 DNS 不会被修改。" submit-label="确认切换" :busy="tunnelSwitchBusy" :submit-disabled="tunnelSwitchDisabled" @close="tunnelDialogOpen=false" @submit="switchTunnel">
-    <label class="label">目标 Tunnel</label>
-    <div v-if="tunnelsLoading" class="grid h-20 place-items-center text-xs text-muted"><span class="flex items-center gap-2"><span class="spinner" />正在加载 Tunnel</span></div>
-    <SelectMenu v-else v-model="selectedTunnelId" :options="tunnelOptions" searchable search-placeholder="搜索 Tunnel" aria-label="目标 Tunnel" />
-    <p v-if="selectedTunnelId === setup?.tunnelId" class="mt-2 text-xs text-amber-700">所选 Tunnel 已是当前 Tunnel，请选择其他 Tunnel。</p>
-    <p v-else-if="!tunnelsLoading && !tunnelOptions.length" class="mt-2 text-xs text-muted">当前 Account 下没有可切换的 remotely-managed Tunnel。</p>
   </FormDialog>
   <ConfirmDialog :open="!!deleteTunnelTarget" title="删除 Tunnel？" :description="`确定删除 Tunnel「${deleteTunnelTarget?.name || ''}」吗？该操作会永久删除 Cloudflare 上的 Tunnel，并中断其所有连接。关联 DNS 记录不会自动删除。此操作不可撤销。`" confirm-label="确认删除" :busy="deleteTunnelBusy" @cancel="deleteTunnelTarget=null" @confirm="deleteTunnel" />
 </template>
