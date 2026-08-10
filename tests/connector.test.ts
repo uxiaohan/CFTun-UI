@@ -25,4 +25,13 @@ describe("connector command", () => {
     expect(manager.snapshot()).toMatchObject({ state: "failed", desired: false, nextRestartAt: null });
     expect(manager.recentLogs().at(-1)?.message).toContain("重新选择 Tunnel");
   });
+
+  test("filters unavailable ICMP proxy warnings but keeps other warnings", () => {
+    const manager = new ConnectorManager(() => ({ tunnel_token: "secret" }));
+    const writable = manager as unknown as { handleOutput(source: "stderr", message: string): void };
+    writable.handleOutput("stderr", "WRN The user running cloudflared process has a GID (group ID) that is not within ping_group_range error=\"Group ID 65532 is not between ping group 1 to 0\"");
+    writable.handleOutput("stderr", "WRN ICMP proxy feature is disabled error=\"cannot create ICMPv4 proxy: Group ID 65532 is not between ping group 1 to 0 nor ICMPv6 proxy: socket: permission denied\"");
+    writable.handleOutput("stderr", "WRN Retrying connection after temporary network failure");
+    expect(manager.recentLogs().map((log) => log.message)).toEqual(["WRN Retrying connection after temporary network failure"]);
+  });
 });

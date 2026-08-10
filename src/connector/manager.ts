@@ -126,6 +126,7 @@ export class ConnectorManager {
   }
 
   private handleOutput(source: "stdout" | "stderr", message: string): void {
+    if (isUnavailableIcmpProxyWarning(message)) return;
     this.addLog(source, message);
     if (!/Unauthorized:\s*Tunnel not found/i.test(message)) return;
     this.fatalError = "当前 Tunnel 已不存在或 Connector Token 已失效，请重新选择 Tunnel";
@@ -162,6 +163,10 @@ function truncateUtf8(value: string, maxBytes: number): string {
   return prefix + suffix;
 }
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
+function isUnavailableIcmpProxyWarning(message: string): boolean {
+  return /\bWRN\b.*\bGID\b.*ping_group_range/i.test(message)
+    || /\bWRN\b.*ICMP proxy feature is disabled.*(?:ping group|permission denied)/i.test(message);
+}
 function connectorProtocol(value?: string): ConnectorProtocol {
   if (value === undefined || value === "auto" || value === "quic" || value === "http2") return value ?? "auto";
   throw new Error("传输协议只能是自动、QUIC 或 HTTP/2");
