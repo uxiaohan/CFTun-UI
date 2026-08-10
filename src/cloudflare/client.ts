@@ -58,6 +58,7 @@ export class CloudflareClient {
   zones(accountId?: string): Promise<JsonObject[]> { return this.list("/zones", { ...(accountId ? { "account.id": accountId } : {}), status: "active" }); }
   tunnels(accountId: string): Promise<JsonObject[]> { return this.list(`/accounts/${id(accountId)}/tunnels`, { is_deleted: "false", tun_types: "cfd_tunnel" }); }
   createTunnel(accountId: string, name: string): Promise<JsonObject> { return this.request("POST", `/accounts/${id(accountId)}/cfd_tunnel`, { name, config_src: "cloudflare" }); }
+  deleteTunnel(accountId: string, tunnelId: string): Promise<JsonObject> { return this.request("DELETE", `/accounts/${id(accountId)}/cfd_tunnel/${id(tunnelId)}`); }
   tunnelToken(accountId: string, tunnelId: string): Promise<string> { return this.request("GET", `/accounts/${id(accountId)}/cfd_tunnel/${id(tunnelId)}/token`); }
   tunnelConfig(accountId: string, tunnelId: string): Promise<TunnelConfiguration> { return this.request("GET", `/accounts/${id(accountId)}/cfd_tunnel/${id(tunnelId)}/configurations`); }
   updateTunnelConfig(accountId: string, tunnelId: string, config: JsonObject): Promise<TunnelConfiguration> { return this.request("PUT", `/accounts/${id(accountId)}/cfd_tunnel/${id(tunnelId)}/configurations`, { config }); }

@@ -2,7 +2,7 @@ import type {
   AuthUser, CloudflareChoice, ConnectorLog, ConnectorSnapshot,
   DeleteMutation, LoginCredentials, Mapping, MappingInput, MappingMutation,
   CloudflareSettingsResult, ConnectorProtocol, ConnectorSettingsInput, EdgeIpVersion, MappingSyncResult,
-  MappingTestResult, Operation, PublicStatus, SetupStatus,
+  MappingTestResult, Operation, PublicStatus, SetupStatus, TunnelSwitchResult,
 } from "./types";
 
 type ErrorPayload = { error?: string | { message?: string }; [key: string]: unknown };
@@ -42,6 +42,7 @@ export const apiClient = {
   zones: async (accountId?: string) => (await api<{ zones: CloudflareChoice[] }>(`/api/cloudflare/zones${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`)).zones,
   tunnels: async (accountId: string) => (await api<{ tunnels: CloudflareChoice[] }>(`/api/cloudflare/tunnels?accountId=${encodeURIComponent(accountId)}`)).tunnels,
   createTunnel: (name: string) => api<{ tunnel: CloudflareChoice }>("/api/cloudflare/tunnels", { method: "POST", body: json({ name }) }),
+  deleteTunnel: (tunnelId: string) => api<{ deleted: true; tunnelId: string }>(`/api/cloudflare/tunnels/${encodeURIComponent(tunnelId)}`, { method: "DELETE" }),
   saveSetupTunnel: (tunnelId: string) => api<{ tunnel: CloudflareChoice; sync: MappingSyncResult }>("/api/setup/tunnel", { method: "POST", body: json({ tunnelId }) }),
   completeSetup: (body: { connectorAutoStart: boolean }) => api<{ completed: true; connector: ConnectorSnapshot }>("/api/setup/complete", { method: "POST", body: json(body) }),
   connector: () => api<ConnectorSnapshot>("/api/connector"),
@@ -57,6 +58,7 @@ export const apiClient = {
   operation: (id: string) => api<Operation>(`/api/operations/${encodeURIComponent(id)}`),
   updateCredentials: (body: { username: string; currentPassword: string; password: string }) => api<{ updated: true }>("/api/settings/credentials", { method: "PUT", body: json(body) }),
   updateCloudflare: (body: { accountId: string; token: string }) => api<CloudflareSettingsResult>("/api/settings/token", { method: "PUT", body: json(body) }),
+  switchTunnel: (tunnelId: string) => api<TunnelSwitchResult>("/api/settings/tunnel", { method: "POST", body: json({ tunnelId }) }),
   connectorSettings: () => api<{ connector_auto_start: boolean; connector_protocol: ConnectorProtocol; connector_edge_ip_version: EdgeIpVersion }>("/api/settings"),
   updateConnector: (body: ConnectorSettingsInput) => api<{ updated: true; connector: ConnectorSnapshot }>("/api/settings", { method: "PUT", body: json({ connector_auto_start: body.autoStart, connector_protocol: body.protocol, connector_edge_ip_version: body.edgeIpVersion }) }),
 };

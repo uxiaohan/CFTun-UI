@@ -116,6 +116,14 @@ export class AppDatabase {
     })();
   }
 
+  switchTunnel(tunnel: { id: string; name: string; token: string }, mappings: MappingRecord[]): void {
+    this.sqlite.transaction(() => {
+      this.setSettings({ tunnel_id: tunnel.id, tunnel_name: tunnel.name, tunnel_token: tunnel.token, setup_completed: "true" });
+      this.sqlite.exec("DELETE FROM mappings; DELETE FROM operations;");
+      for (const mapping of mappings) this.saveMapping(mapping);
+    })();
+  }
+
   deleteMapping(id: string): void { this.sqlite.query("DELETE FROM mappings WHERE id=?").run(id); }
 
   createOperation(action: string, mappingId?: string, requestedId?: string): string {

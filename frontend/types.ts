@@ -30,6 +30,7 @@ export interface CloudflareChoice {
   name: string;
   status?: string;
   config_src?: string;
+  created_at?: string;
 }
 
 export interface ConnectorSnapshot {
@@ -105,6 +106,7 @@ export interface MappingMutation { mapping: Mapping; operationId: string }
 export interface DeleteMutation { operationId: string }
 export interface MappingSyncResult { imported: number; skipped: number; dnsLinked: number; mappings?: Mapping[] }
 export interface CloudflareSettingsResult { updated: true; accountChanged: boolean; tunnelInvalidated: boolean; accountId: string; zoneCount: number; tunnelCount: number }
+export interface TunnelSwitchResult { tunnel: CloudflareChoice; sync: MappingSyncResult; connector: ConnectorSnapshot; connectorError?: string }
 export type ConnectorProtocol = "auto" | "quic" | "http2";
 export type EdgeIpVersion = "auto" | "4" | "6";
 export interface ConnectorSettingsInput { autoStart: boolean; protocol: ConnectorProtocol; edgeIpVersion: EdgeIpVersion }

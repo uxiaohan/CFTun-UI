@@ -182,6 +182,109 @@ describe("authentication API", () => {
     } finally { mock.stop(true); }
   });
 
+  test("protects the current tunnel from deletion", async () => {
+    db = new AppDatabase(":memory:");
+    const tunnelId = "11111111-1111-4111-8111-111111111111";
+    db.setSettings({ account_id: "0123456789abcdef0123456789abcdef", tunnel_id: tunnelId, tunnel_token: "token", setup_completed: "true" });
+    const app = createApp({ database: db });
+    await app.fetch(jsonRequest("/api/auth/setup", { username: "admin", password: "correct-horse-battery" }));
+    const login = await app.fetch(jsonRequest("/api/auth/login", { username: "admin", password: "correct-horse-battery" }));
+    const response = await app.fetch(new Request(`http://localhost/api/cloudflare/tunnels/${tunnelId}`, { method: "DELETE", headers: { Cookie: login.headers.get("set-cookie") ?? "", Origin: "http://localhost" } }));
+    expect(response.status).toBe(409);
+    expect(db.getSetting("tunnel_id")).toBe(tunnelId);
+  });
+
+  test("creates a tunnel without changing the current binding", async () => {
+    db = new AppDatabase(":memory:");
+    const accountId = "0123456789abcdef0123456789abcdef";
+    const currentId = "11111111-1111-4111-8111-111111111111";
+    const createdId = "22222222-2222-4222-8222-222222222222";
+    db.setSettings({ account_id: accountId, cloudflare_api_token: "api-token", tunnel_id: currentId, tunnel_token: "token", setup_completed: "true" });
+    const mock = Bun.serve({ port: 0, fetch(request) {
+      const path = new URL(request.url).pathname;
+      const result = path.endsWith("/cfd_tunnel") && request.method === "POST" ? { id: createdId, name: "new-tunnel", config_src: "cloudflare", status: "inactive" } : null;
+      return Response.json({ success: result !== null, result, errors: [], result_info: { page: 1, total_pages: 1 } }, { status: result === null ? 404 : 200 });
+    } });
+    try {
+      const app = createApp({ database: db, cloudflareBaseUrl: `${mock.url}client/v4` });
+      await app.fetch(jsonRequest("/api/auth/setup", { username: "admin", password: "correct-horse-battery" }));
+      const login = await app.fetch(jsonRequest("/api/auth/login", { username: "admin", password: "correct-horse-battery" }));
+      const response = await app.fetch(jsonRequest("/api/cloudflare/tunnels", { name: "new-tunnel" }, "POST", login.headers.get("set-cookie") ?? ""));
+      expect(response.status).toBe(201);
+      expect(await response.json()).toMatchObject({ tunnel: { id: createdId, name: "new-tunnel" } });
+      expect(db.getSetting("tunnel_id")).toBe(currentId);
+    } finally { mock.stop(true); }
+  });
+
+  test("deletes a non-current remotely-managed tunnel", async () => {
+    db = new AppDatabase(":memory:");
+    const accountId = "0123456789abcdef0123456789abcdef";
+    const currentId = "11111111-1111-4111-8111-111111111111";
+    const deleteId = "22222222-2222-4222-8222-222222222222";
+    db.setSettings({ account_id: accountId, cloudflare_api_token: "api-token", tunnel_id: currentId, tunnel_token: "token", setup_completed: "true" });
+    let deleted = false;
+    const mock = Bun.serve({ port: 0, fetch(request) {
+      const path = new URL(request.url).pathname;
+      const result = path.endsWith("/tunnels") ? [{ id: currentId, name: "current", config_src: "cloudflare" }, { id: deleteId, name: "unused", config_src: "cloudflare", status: "down" }]
+        : path.endsWith(`/cfd_tunnel/${deleteId}`) && request.method === "DELETE" ? (deleted = true, { id: deleteId }) : null;
+      return Response.json({ success: result !== null, result, errors: [], result_info: { page: 1, total_pages: 1 } }, { status: result === null ? 404 : 200 });
+    } });
+    try {
+      const app = createApp({ database: db, cloudflareBaseUrl: `${mock.url}client/v4` });
+      await app.fetch(jsonRequest("/api/auth/setup", { username: "admin", password: "correct-horse-battery" }));
+      const login = await app.fetch(jsonRequest("/api/auth/login", { username: "admin", password: "correct-horse-battery" }));
+      const response = await app.fetch(new Request(`http://localhost/api/cloudflare/tunnels/${deleteId}`, { method: "DELETE", headers: { Cookie: login.headers.get("set-cookie") ?? "", Origin: "http://localhost" } }));
+      expect(response.status).toBe(200); expect(deleted).toBe(true); expect(db.getSetting("tunnel_id")).toBe(currentId);
+    } finally { mock.stop(true); }
+  });
+
+  test("switches tunnels only after remote preflight succeeds", async () => {
+    db = new AppDatabase(":memory:");
+    const accountId = "0123456789abcdef0123456789abcdef";
+    const currentId = "11111111-1111-4111-8111-111111111111";
+    const targetId = "22222222-2222-4222-8222-222222222222";
+    db.setSettings({ account_id: accountId, cloudflare_api_token: "api-token", tunnel_id: currentId, tunnel_name: "current", tunnel_token: "old-token", setup_completed: "true" });
+    const mock = Bun.serve({ port: 0, fetch(request) {
+      const path = new URL(request.url).pathname;
+      const result = path.endsWith("/tunnels") ? [{ id: currentId, name: "current", config_src: "cloudflare" }, { id: targetId, name: "target", config_src: "cloudflare" }]
+        : path.endsWith(`/cfd_tunnel/${targetId}/token`) ? "new-token"
+        : path.endsWith(`/cfd_tunnel/${targetId}/configurations`) ? { version: 1, config: { ingress: [{ service: "http_status:404" }] } }
+        : path === "/client/v4/zones" ? [] : null;
+      return Response.json({ success: result !== null, result, errors: [], result_info: { page: 1, total_pages: 1 } }, { status: result === null ? 404 : 200 });
+    } });
+    try {
+      const app = createApp({ database: db, cloudflareBaseUrl: `${mock.url}client/v4` });
+      await app.fetch(jsonRequest("/api/auth/setup", { username: "admin", password: "correct-horse-battery" }));
+      const login = await app.fetch(jsonRequest("/api/auth/login", { username: "admin", password: "correct-horse-battery" }));
+      const response = await app.fetch(jsonRequest("/api/settings/tunnel", { tunnelId: targetId }, "POST", login.headers.get("set-cookie") ?? ""));
+      expect(response.status).toBe(200);
+      expect(db.settings()).toMatchObject({ tunnel_id: targetId, tunnel_name: "target", tunnel_token: "new-token", setup_completed: "true" });
+      expect(await response.json()).toMatchObject({ tunnel: { id: targetId, name: "target" }, sync: { imported: 0, skipped: 1 }, connector: { state: "stopped", desired: false } });
+    } finally { mock.stop(true); }
+  });
+
+  test("keeps the current tunnel when target preflight fails", async () => {
+    db = new AppDatabase(":memory:");
+    const accountId = "0123456789abcdef0123456789abcdef";
+    const currentId = "11111111-1111-4111-8111-111111111111";
+    const targetId = "22222222-2222-4222-8222-222222222222";
+    db.setSettings({ account_id: accountId, cloudflare_api_token: "api-token", tunnel_id: currentId, tunnel_name: "current", tunnel_token: "old-token", setup_completed: "true" });
+    const mock = Bun.serve({ port: 0, fetch(request) {
+      const path = new URL(request.url).pathname;
+      const result = path.endsWith("/tunnels") ? [{ id: targetId, name: "target", config_src: "cloudflare" }]
+        : path.endsWith(`/cfd_tunnel/${targetId}/token`) ? "new-token" : null;
+      return Response.json({ success: result !== null, result, errors: result === null ? [{ message: "Unavailable" }] : [], result_info: { page: 1, total_pages: 1 } }, { status: result === null ? 503 : 200 });
+    } });
+    try {
+      const app = createApp({ database: db, cloudflareBaseUrl: `${mock.url}client/v4` });
+      await app.fetch(jsonRequest("/api/auth/setup", { username: "admin", password: "correct-horse-battery" }));
+      const login = await app.fetch(jsonRequest("/api/auth/login", { username: "admin", password: "correct-horse-battery" }));
+      const response = await app.fetch(jsonRequest("/api/settings/tunnel", { tunnelId: targetId }, "POST", login.headers.get("set-cookie") ?? ""));
+      expect(response.status).toBe(502);
+      expect(db.settings()).toMatchObject({ tunnel_id: currentId, tunnel_name: "current", tunnel_token: "old-token", setup_completed: "true" });
+    } finally { mock.stop(true); }
+  });
+
   test("releases connector event subscriptions when the SSE stream is cancelled", async () => {
     db = new AppDatabase(":memory:");
     const app = createApp({ database: db });

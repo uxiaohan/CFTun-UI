@@ -128,6 +128,16 @@ export function createApp(options: AppOptions = {}): { fetch(request: Request): 
         const body = await bodyObject(request); const name = string(body.name).trim(); if (!/^[A-Za-z0-9_. -]{1,100}$/.test(name)) throw new HttpError(400, "Tunnel 名称格式无效");
         return json({ tunnel: await cloudflare().createTunnel(requiredSetting(db, "account_id"), name) }, 201);
       }
+      const tunnelDelete = path.match(/^\/api\/cloudflare\/tunnels\/([A-Za-z0-9_-]{16,64})$/);
+      if (tunnelDelete && method === "DELETE") {
+        const tunnelId = tunnelDelete[1]!; const currentTunnelId = db.getSetting("tunnel_id");
+        if (tunnelId === currentTunnelId) throw new HttpError(409, "当前使用的 Tunnel 不能删除，请先切换到其他 Tunnel");
+        const accountId = requiredSetting(db, "account_id"); const client = cloudflare();
+        const tunnel = (await client.tunnels(accountId)).find((item) => item.id === tunnelId && item.config_src === "cloudflare");
+        if (!tunnel) throw new HttpError(404, "Tunnel 不存在或不是 remotely-managed Tunnel");
+        await client.deleteTunnel(accountId, tunnelId);
+        return json({ deleted: true, tunnelId });
+      }
 
       if (path === "/api/settings/credentials" && method === "PUT") {
         const body = await bodyObject(request);
@@ -137,6 +147,23 @@ export function createApp(options: AppOptions = {}): { fetch(request: Request): 
       if (path === "/api/settings/token" && method === "PUT") {
         const body = await bodyObject(request); const token = string(body.token); const accountId = cloudflareId(body.accountId, "Account ID");
         return json({ updated: true, ...await bindToken(accountId, token) });
+      }
+      if (path === "/api/settings/tunnel" && method === "POST") {
+        const body = await bodyObject(request); const tunnelId = string(body.tunnelId);
+        const accountId = requiredSetting(db, "account_id"); const currentTunnelId = requiredSetting(db, "tunnel_id");
+        if (!tunnelId) throw new HttpError(400, "请选择 Tunnel");
+        if (tunnelId === currentTunnelId) throw new HttpError(409, "所选 Tunnel 已是当前 Tunnel");
+        const client = cloudflare();
+        const tunnel = (await client.tunnels(accountId)).find((item) => item.id === tunnelId && item.config_src === "cloudflare");
+        if (!tunnel) throw new HttpError(404, "所选 Tunnel 不存在或不是 remotely-managed Tunnel");
+        const [token, sync] = await Promise.all([client.tunnelToken(accountId, tunnelId), mappings.readRemote(accountId, tunnelId)]);
+        const shouldRun = connector.snapshot().desired;
+        await connector.stop();
+        try { db.switchTunnel({ id: tunnelId, name: string(tunnel.name), token }, sync.mappings); }
+        catch (error) { if (shouldRun) try { await connector.start(); } catch {} throw error; }
+        let connectorError: string | undefined;
+        if (shouldRun) try { await connector.start(); } catch (error) { connectorError = error instanceof Error ? error.message : String(error); }
+        return json({ tunnel: { id: tunnelId, name: string(tunnel.name), status: typeof tunnel.status === "string" ? tunnel.status : undefined }, sync, connector: connector.snapshot(), connectorError });
       }
       if (path === "/api/settings" && method === "GET") return json(connectorSettings(db));
       if (path === "/api/settings" && method === "PUT") {

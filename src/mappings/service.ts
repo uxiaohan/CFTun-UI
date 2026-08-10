@@ -21,10 +21,16 @@ export class MappingService {
 
   async sync(): Promise<{ mappings: MappingRecord[]; imported: number; skipped: number; dnsLinked: number }> {
     const settings = requireCloudflareSettings(this.db);
+    const result = await this.readRemote(settings.accountId, settings.tunnelId);
+    this.db.replaceTunnelMappings(settings.tunnelId, result.mappings);
+    return result;
+  }
+
+  async readRemote(accountId: string, tunnelId: string): Promise<{ mappings: MappingRecord[]; imported: number; skipped: number; dnsLinked: number }> {
     const cf = this.cloudflare();
-    const [configuration, zones] = await Promise.all([cf.tunnelConfig(settings.accountId, settings.tunnelId), this.accountZones(cf, settings.accountId)]);
+    const [configuration, zones] = await Promise.all([cf.tunnelConfig(accountId, tunnelId), this.accountZones(cf, accountId)]);
     const ingress = configuration.config?.ingress ?? [];
-    const previous = new Map(this.db.listMappings().filter((item) => item.tunnelId === settings.tunnelId).map((item) => [mappingKey(item.hostname, item.path), item]));
+    const previous = new Map(this.db.listMappings().filter((item) => item.tunnelId === tunnelId).map((item) => [mappingKey(item.hostname, item.path), item]));
     const now = new Date().toISOString();
     const mappings: MappingRecord[] = [];
     const dnsByZone = new Map<string, JsonObject[]>();
@@ -40,7 +46,7 @@ export class MappingService {
       const path = typeof rule.path === "string" ? rule.path : null;
       let records = dnsByZone.get(zone.id);
       if (!records) { records = await cf.dnsRecords(zone.id, { type: "CNAME" }); dnsByZone.set(zone.id, records); }
-      const dns = records.find((record) => dnsPointsToTunnel(record, hostname, settings.tunnelId));
+      const dns = records.find((record) => dnsPointsToTunnel(record, hostname, tunnelId));
       const old = previous.get(mappingKey(hostname, path));
       const origin = rule.originRequest && typeof rule.originRequest === "object" && !Array.isArray(rule.originRequest) ? rule.originRequest as JsonObject : {};
       mappings.push({
@@ -49,12 +55,11 @@ export class MappingService {
         targetPort: parsed.port, noTLSVerify: origin.noTLSVerify === true,
         originServerName: typeof origin.originServerName === "string" ? origin.originServerName : undefined,
         httpHostHeader: typeof origin.httpHostHeader === "string" ? origin.httpHostHeader : undefined,
-        service, tunnelId: settings.tunnelId, dnsRecordId: dns ? String(dns.id) : null,
+        service, tunnelId, dnsRecordId: dns ? String(dns.id) : null,
         rawRule: rule, ruleOrder, syncStatus: dns ? "synced" : "error", enabled: true,
         createdAt: old?.createdAt ?? now, updatedAt: now,
       });
     }
-    this.db.replaceTunnelMappings(settings.tunnelId, mappings);
     return { mappings, imported: mappings.length, skipped, dnsLinked: mappings.filter((item) => item.dnsRecordId).length };
   }
 

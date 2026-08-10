@@ -9,10 +9,12 @@ const props = withDefaults(defineProps<{
   description?: string;
   submitLabel?: string;
   busy?: boolean;
+  submitDisabled?: boolean;
 }>(), {
   description: "",
   submitLabel: "保存",
   busy: false,
+  submitDisabled: false,
 });
 const emit = defineEmits<{ close: []; submit: [] }>();
 const panel = ref<HTMLElement | null>(null);
@@ -44,7 +46,7 @@ watch(() => props.open, (open) => {
             <div class="p-5"><slot /></div>
             <footer class="flex justify-end gap-2 border-t border-black/[.07] px-5 py-3.5">
               <button class="btn-secondary" type="button" :disabled="busy" @click="close">取消</button>
-              <button class="btn-primary min-w-24" type="submit" :disabled="busy">
+              <button class="btn-primary min-w-24" type="submit" :disabled="busy || submitDisabled">
                 <span v-if="busy" class="spinner" aria-hidden="true" />
                 {{ busy ? "正在保存" : submitLabel }}
               </button>
