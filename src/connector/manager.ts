@@ -126,7 +126,7 @@ export class ConnectorManager {
   }
 
   private handleOutput(source: "stdout" | "stderr", message: string): void {
-    if (isUnavailableIcmpProxyWarning(message)) return;
+    if (isUnavailableIcmpProxyWarning(message) || isBenignRemoteCancellation(message)) return;
     this.addLog(source, message);
     if (!/Unauthorized:\s*Tunnel not found/i.test(message)) return;
     this.fatalError = "当前 Tunnel 已不存在或 Connector Token 已失效，请重新选择 Tunnel";
@@ -166,6 +166,9 @@ function errorMessage(error: unknown): string { return error instanceof Error ? 
 function isUnavailableIcmpProxyWarning(message: string): boolean {
   return /\bWRN\b.*\bGID\b.*ping_group_range/i.test(message)
     || /\bWRN\b.*ICMP proxy feature is disabled.*(?:ping group|permission denied)/i.test(message);
+}
+function isBenignRemoteCancellation(message: string): boolean {
+  return /\bERR\b.*stream \d+ canceled by remote with error code 0\b/i.test(message);
 }
 function connectorProtocol(value?: string): ConnectorProtocol {
   if (value === undefined || value === "auto" || value === "quic" || value === "http2") return value ?? "auto";

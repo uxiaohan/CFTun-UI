@@ -34,4 +34,17 @@ describe("connector command", () => {
     writable.handleOutput("stderr", "WRN Retrying connection after temporary network failure");
     expect(manager.recentLogs().map((log) => log.message)).toEqual(["WRN Retrying connection after temporary network failure"]);
   });
+
+  test("filters normal remote stream cancellation but keeps actual stream errors", () => {
+    const manager = new ConnectorManager(() => ({ tunnel_token: "secret" }));
+    const writable = manager as unknown as { handleOutput(source: "stderr", message: string): void };
+    writable.handleOutput("stderr", 'ERR error="stream 105 canceled by remote with error code 0" connIndex=2 event=1');
+    writable.handleOutput("stderr", 'ERR Request failed error="stream 105 canceled by remote with error code 0" dest=https://example.com/api/connector/events');
+    writable.handleOutput("stderr", 'ERR Request failed error="stream 106 canceled by remote with error code 1" dest=https://example.com/file');
+    writable.handleOutput("stderr", 'ERR Request failed error="connection timeout" dest=https://example.com/api');
+    expect(manager.recentLogs().map((log) => log.message)).toEqual([
+      'ERR Request failed error="stream 106 canceled by remote with error code 1" dest=https://example.com/file',
+      'ERR Request failed error="connection timeout" dest=https://example.com/api',
+    ]);
+  });
 });
