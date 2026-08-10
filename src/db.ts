@@ -62,6 +62,14 @@ export class AppDatabase {
     })();
   }
 
+  clearTunnelBinding(): void {
+    const keys = ["tunnel_id", "tunnel_name", "tunnel_token", "setup_completed"];
+    this.sqlite.transaction(() => {
+      this.sqlite.query(`DELETE FROM settings WHERE key IN (${keys.map(() => "?").join(",")})`).run(...keys);
+      this.sqlite.exec("DELETE FROM mappings; DELETE FROM operations;");
+    })();
+  }
+
   createSession(id: string, username: string, expiresAt: string): void {
     const now = new Date().toISOString();
     this.sqlite.query("DELETE FROM admin_sessions WHERE expires_at <= ?").run(now);
@@ -134,7 +142,7 @@ export class AppDatabase {
   private operationCount = 0;
 
   private pruneOperations(): void {
-    if (++this.operationCount % 50 !== 0) return;
+    if (++this.operationCount % 10 !== 0) return;
     this.sqlite.exec(`
       DELETE FROM operations WHERE id IN (
         SELECT id FROM operations ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET 500

@@ -119,6 +119,76 @@ describe("authentication API", () => {
     expect(saved.status).toBe(200);
     expect(await saved.json()).toMatchObject({ connector_auto_start: false, connector_protocol: "http2", connector_edge_ip_version: "6" });
   });
+
+  test("refreshes the connector token when API credentials change in the same account", async () => {
+    db = new AppDatabase(":memory:");
+    const accountId = "0123456789abcdef0123456789abcdef";
+    const tunnelId = "11111111-1111-4111-8111-111111111111";
+    const zoneId = "fedcba9876543210fedcba9876543210";
+    db.setSettings({ account_id: accountId, tunnel_id: tunnelId, tunnel_name: "old", tunnel_token: "old-token", setup_completed: "true" });
+    const mock = Bun.serve({ port: 0, fetch(request) {
+      const path = new URL(request.url).pathname;
+      const result = path === "/client/v4/user/tokens/verify" ? { status: "active" }
+        : path.endsWith("/tunnels") ? [{ id: tunnelId, name: "current", config_src: "cloudflare" }]
+        : path.endsWith(`/cfd_tunnel/${tunnelId}/token`) ? "fresh-token"
+        : path === "/client/v4/zones" ? [{ id: zoneId, name: "example.com" }]
+        : path.endsWith("/dns_records") ? []
+        : null;
+      return Response.json({ success: result !== null, result, errors: result === null ? [{ message: "Not found" }] : [], result_info: { page: 1, total_pages: 1 } }, { status: result === null ? 404 : 200 });
+    } });
+    try {
+      const app = createApp({ database: db, cloudflareBaseUrl: `${mock.url}client/v4` });
+      await app.fetch(jsonRequest("/api/auth/setup", { username: "admin", password: "correct-horse-battery" }));
+      const login = await app.fetch(jsonRequest("/api/auth/login", { username: "admin", password: "correct-horse-battery" }));
+      const response = await app.fetch(jsonRequest("/api/settings/token", { accountId, token: "new-api-token" }, "PUT", login.headers.get("set-cookie") ?? ""));
+      expect(response.status).toBe(200);
+      expect(db.getSetting("tunnel_token")).toBe("fresh-token");
+      expect(db.getSetting("tunnel_name")).toBe("current");
+      expect(db.getSetting("setup_completed")).toBe("true");
+    } finally { mock.stop(true); }
+  });
+
+  test("returns to tunnel setup when the bound tunnel has been deleted", async () => {
+    db = new AppDatabase(":memory:");
+    const accountId = "0123456789abcdef0123456789abcdef";
+    const zoneId = "fedcba9876543210fedcba9876543210";
+    db.setSettings({ account_id: accountId, tunnel_id: "deleted-tunnel", tunnel_name: "deleted", tunnel_token: "stale-token", setup_completed: "true" });
+    const mock = Bun.serve({ port: 0, fetch(request) {
+      const path = new URL(request.url).pathname;
+      const result = path === "/client/v4/user/tokens/verify" ? { status: "active" }
+        : path.endsWith("/tunnels") ? []
+        : path === "/client/v4/zones" ? [{ id: zoneId, name: "example.com" }]
+        : path.endsWith("/dns_records") ? []
+        : null;
+      return Response.json({ success: result !== null, result, errors: [], result_info: { page: 1, total_pages: 1 } }, { status: result === null ? 404 : 200 });
+    } });
+    try {
+      const app = createApp({ database: db, cloudflareBaseUrl: `${mock.url}client/v4` });
+      await app.fetch(jsonRequest("/api/auth/setup", { username: "admin", password: "correct-horse-battery" }));
+      const login = await app.fetch(jsonRequest("/api/auth/login", { username: "admin", password: "correct-horse-battery" }));
+      const response = await app.fetch(jsonRequest("/api/settings/token", { accountId, token: "new-api-token" }, "PUT", login.headers.get("set-cookie") ?? ""));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ tunnelInvalidated: true });
+      expect(db.getSetting("tunnel_id")).toBeUndefined();
+      expect(db.getSetting("tunnel_token")).toBeUndefined();
+      expect(db.getSetting("setup_completed")).toBe("false");
+    } finally { mock.stop(true); }
+  });
+
+  test("releases connector event subscriptions when the SSE stream is cancelled", async () => {
+    db = new AppDatabase(":memory:");
+    const app = createApp({ database: db });
+    await app.fetch(jsonRequest("/api/auth/setup", { username: "admin", password: "correct-horse-battery" }));
+    const login = await app.fetch(jsonRequest("/api/auth/login", { username: "admin", password: "correct-horse-battery" }));
+    const response = await app.fetch(new Request("http://localhost/api/connector/events", { headers: { Cookie: (login.headers.get("set-cookie") ?? "").split(";")[0] ?? "" } }));
+    const subscribers = (app.connector as unknown as { subscribers: Set<unknown> }).subscribers;
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    expect(subscribers.size).toBe(1);
+    const reader = response.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    expect(subscribers.size).toBe(0);
+  });
 });
 
 function jsonRequest(path: string, body: unknown, method = "POST", cookie = ""): Request {

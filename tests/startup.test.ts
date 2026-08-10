@@ -23,12 +23,13 @@ describe("startup banner", () => {
     expect(consoleUrls("192.168.1.8", 9911, interfaces)).toEqual(["http://192.168.1.8:9911"]);
   });
 
-  test("formats a concise Chinese startup banner in Shanghai time", () => {
+  test("formats a concise Chinese startup banner in local time", () => {
     const now = new Date("2026-08-07T13:44:29.000Z");
-    expect(formatStartupTime(now)).toBe("2026-08-07 21:44:29");
+    const expectedTime = formatStartupTime(now);
+    const expectedTz = process.env.TZ ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     const banner = startupBanner("0.0.0.0", 9911, now, interfaces);
     expect(banner).toContain("🚇 CFTun-UI 启动成功");
-    expect(banner).toContain("🕒 当前时间: 2026-08-07 21:44:29 (Asia/Shanghai)");
+    expect(banner).toContain(`🕒 当前时间: ${expectedTime} (${expectedTz})`);
     expect(banner).toContain("🔗 GitHub: https://github.com/uxiaohan/CFTun-UI");
     expect(banner).not.toContain("172.17.0.1");
   });

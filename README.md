@@ -92,6 +92,8 @@ cftun-data
 └── /data/cftun-ui.sqlite
 ```
 
+容器启动程序会初始化 `/data`，随后在加载服务前降权到 UID/GID `65532:65532`；Bun 和 `cloudflared` 均不会以 root 身份常驻运行。若 bind mount、NFS 或 SMB 不允许容器调整目录所有权，启动会输出明确的 `/data` 不可写错误并退出。
+
 日志预算：Docker 磁盘日志最多 `7 MiB`；Connector 页面内存日志最多 `1 MiB / 500 行`；SQLite 操作记录最多约 `512 KiB / 500 条`，WAL 自动检查点为 64 页且限制为 `512 KiB`。已为元数据开销预留空间，总预算控制在 `10 MiB` 内。
 
 ## 🧭 Mapping

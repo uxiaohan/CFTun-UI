@@ -17,4 +17,12 @@ describe("connector command", () => {
     expect(logs.every((log) => encoder.encode(log.message).byteLength <= 8 * 1024)).toBe(true);
     expect(logs.reduce((total, log) => total + encoder.encode(JSON.stringify(log)).byteLength, 0)).toBeLessThanOrEqual(1024 * 1024);
   });
+
+  test("stops retrying when Cloudflare reports that the tunnel no longer exists", () => {
+    const manager = new ConnectorManager(() => ({ tunnel_token: "secret" }));
+    const writable = manager as unknown as { handleOutput(source: "stderr", message: string): void };
+    writable.handleOutput("stderr", 'ERR Register tunnel error from server side error="Unauthorized: Tunnel not found"');
+    expect(manager.snapshot()).toMatchObject({ state: "failed", desired: false, nextRestartAt: null });
+    expect(manager.recentLogs().at(-1)?.message).toContain("重新选择 Tunnel");
+  });
 });

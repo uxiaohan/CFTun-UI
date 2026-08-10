@@ -21,6 +21,7 @@ export class ConnectorManager {
   private nextRestartAt: string | null = null;
   private startedAt: string | null = null;
   private restartTimer: ReturnType<typeof setTimeout> | null = null;
+  private fatalError: string | null = null;
   private logs: ConnectorLog[] = [];
   private logSizes: number[] = [];
   private logBytes = 0;
@@ -41,6 +42,8 @@ export class ConnectorManager {
 
   recentLogs(limit = 200): ConnectorLog[] { return this.logs.slice(-Math.min(Math.max(limit, 1), this.maxLogs)); }
 
+  notice(message: string): void { this.addLog("system", message); }
+
   async start(): Promise<ConnectorSnapshot> {
     this.desired = true;
     if (this.process || this.state === "starting") return this.snapshot();
@@ -49,6 +52,7 @@ export class ConnectorManager {
     if (!token) throw new Error("Tunnel Token 尚未配置");
     const protocol = connectorProtocol(settings.connector_protocol);
     const edgeIpVersion = connectorEdgeIpVersion(settings.connector_edge_ip_version);
+    this.fatalError = null;
     if (this.restartTimer) { clearTimeout(this.restartTimer); this.restartTimer = null; }
     this.nextRestartAt = null; this.state = "starting"; this.emit("status", this.snapshot());
     try {
@@ -93,7 +97,11 @@ export class ConnectorManager {
     if (this.process !== child) return;
     this.process = null; this.lastExitCode = exitCode; this.startedAt = null;
     this.addLog("system", `cloudflared 已退出（退出码 ${exitCode}）`);
-    if (this.desired) this.scheduleRestart(); else { this.state = "stopped"; this.emit("status", this.snapshot()); }
+    if (this.fatalError) {
+      if (this.state !== "failed") { this.state = "failed"; this.emit("status", this.snapshot()); }
+    }
+    else if (this.desired) this.scheduleRestart();
+    else { this.state = "stopped"; this.emit("status", this.snapshot()); }
   }
 
   private scheduleRestart(): void {
@@ -111,10 +119,23 @@ export class ConnectorManager {
       while (true) {
         const { value, done } = await reader.read(); if (done) break;
         const lines = (pending + decoder.decode(value, { stream: true })).split(/\r?\n/); pending = truncateUtf8(lines.pop() ?? "", this.maxLineBytes);
-        for (const line of lines) if (line) this.addLog(source, redact(line, this.settings().tunnel_token));
+        for (const line of lines) if (line) this.handleOutput(source, redact(line, this.settings().tunnel_token));
       }
-      pending += decoder.decode(); if (pending) this.addLog(source, redact(pending, this.settings().tunnel_token));
+      pending += decoder.decode(); if (pending) this.handleOutput(source, redact(pending, this.settings().tunnel_token));
     } catch (error) { this.addLog("system", `读取日志流失败：${errorMessage(error)}`); }
+  }
+
+  private handleOutput(source: "stdout" | "stderr", message: string): void {
+    this.addLog(source, message);
+    if (!/Unauthorized:\s*Tunnel not found/i.test(message)) return;
+    this.fatalError = "当前 Tunnel 已不存在或 Connector Token 已失效，请重新选择 Tunnel";
+    this.desired = false;
+    if (this.restartTimer) { clearTimeout(this.restartTimer); this.restartTimer = null; }
+    this.nextRestartAt = null;
+    this.state = "failed";
+    this.addLog("system", this.fatalError);
+    this.emit("status", this.snapshot());
+    try { this.process?.kill("SIGTERM"); } catch {}
   }
 
   private addLog(stream: ConnectorLog["stream"], message: string): void {

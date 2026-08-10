@@ -6,8 +6,9 @@ const hostname = process.env.SERVER_HOST ?? "0.0.0.0";
 const port = Number(process.env.SERVER_PORT ?? 9911);
 const frontendRoot = process.env.FRONTEND_DIR ?? `${import.meta.dir}/frontend/dist`;
 
-const server = Bun.serve({ hostname, port, fetch: async (request) => {
+const server = Bun.serve({ hostname, port, fetch: async (request, server) => {
   const url = new URL(request.url);
+  if (url.pathname === "/api/connector/events") server.timeout(request, 0);
   if (url.pathname.startsWith("/api/")) return app.fetch(request);
   if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method Not Allowed", { status: 405 });
   const assetPath = url.pathname === "/" ? "/index.html" : url.pathname;
@@ -21,14 +22,14 @@ const server = Bun.serve({ hostname, port, fetch: async (request) => {
 console.log(startupBanner(hostname, port));
 
 if (app.db.getSetting("connector_auto_start") === "true" && app.db.getSetting("setup_completed") === "true") {
-  void app.connector.start().catch((e) => console.error("Auto-start connector failed:", e));
+  void app.startConnector().catch((e) => console.error("Auto-start connector failed:", e));
 }
 
 let shuttingDown = false;
 async function shutdown(): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  server.stop(true);
+  server.stop(false);
   await app.connector.stop();
   app.db.close();
   process.exit(0);

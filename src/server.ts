@@ -8,7 +8,7 @@ import type { JsonObject, MappingInput } from "./types.ts";
 
 export interface AppOptions { database?: AppDatabase; cloudflareBaseUrl?: string; connector?: ConnectorManager }
 
-export function createApp(options: AppOptions = {}): { fetch(request: Request): Promise<Response>; db: AppDatabase; connector: ConnectorManager } {
+export function createApp(options: AppOptions = {}): { fetch(request: Request): Promise<Response>; db: AppDatabase; connector: ConnectorManager; startConnector(): Promise<ReturnType<ConnectorManager["snapshot"]>> } {
   const db = options.database ?? new AppDatabase();
   const auth = new AuthService(db);
   const cloudflare = (() => {
@@ -23,6 +23,37 @@ export function createApp(options: AppOptions = {}): { fetch(request: Request): 
   const connector = options.connector ?? new ConnectorManager(() => db.settings());
   const mappings = new MappingService(db, cloudflare);
 
+  async function refreshTunnelToken(allowCachedOnTransient = true): Promise<void> {
+    const accountId = requiredSetting(db, "account_id");
+    const tunnelId = requiredSetting(db, "tunnel_id");
+    try {
+      const client = cloudflare();
+      const tunnel = (await client.tunnels(accountId)).find((item) => item.id === tunnelId && item.config_src === "cloudflare");
+      if (!tunnel) {
+        await connector.stop(); db.clearTunnelBinding();
+        throw new HttpError(409, "当前 Tunnel 已不存在，请重新选择 Tunnel");
+      }
+      const token = await client.tunnelToken(accountId, tunnelId);
+      db.setSettings({ tunnel_name: string(tunnel.name), tunnel_token: token });
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      if (error instanceof CloudflareError && allowCachedOnTransient && error.status >= 500 && db.getSetting("tunnel_token")) {
+        connector.notice("Cloudflare 管理 API 暂时不可用，正在使用缓存的 Tunnel Token 启动");
+        return;
+      }
+      if (error instanceof CloudflareError && error.status === 404) {
+        await connector.stop(); db.clearTunnelBinding();
+        throw new HttpError(409, "当前 Tunnel 已不存在，请重新选择 Tunnel");
+      }
+      throw error;
+    }
+  }
+
+  async function startConnector(): Promise<ReturnType<ConnectorManager["snapshot"]>> {
+    await refreshTunnelToken();
+    return connector.start();
+  }
+
   async function bindToken(accountId: string, token: string): Promise<JsonObject> {
     const client = cloudflare(token);
     await client.verify();
@@ -32,8 +63,21 @@ export function createApp(options: AppOptions = {}): { fetch(request: Request): 
     const previousAccountId = db.getSetting("account_id");
     const accountChanged = Boolean(previousAccountId && previousAccountId !== accountId);
     if (accountChanged) { await connector.stop(); db.clearCloudflareBinding(); }
-    db.setSettings({ cloudflare_api_token: token, account_id: accountId, ...(accountChanged || !previousAccountId ? { setup_completed: "false" } : {}) });
-    return { verified: true, accountId, accountChanged, zoneCount: zones.length, tunnelCount: tunnels.length, checks: { token: true, tunnelRead: true, zoneRead: true, dnsRead: true } };
+    const currentTunnelId = accountChanged ? undefined : db.getSetting("tunnel_id");
+    const currentTunnel = currentTunnelId ? tunnels.find((item) => item.id === currentTunnelId && item.config_src === "cloudflare") : undefined;
+    let tunnelInvalidated = false;
+    let refreshedTunnelToken: string | undefined;
+    if (currentTunnelId && !currentTunnel) {
+      await connector.stop(); db.clearTunnelBinding(); tunnelInvalidated = true;
+    } else if (currentTunnel) {
+      refreshedTunnelToken = await client.tunnelToken(accountId, currentTunnelId!);
+    }
+    db.setSettings({
+      cloudflare_api_token: token, account_id: accountId,
+      ...(accountChanged || !previousAccountId || tunnelInvalidated ? { setup_completed: "false" } : {}),
+      ...(currentTunnel && refreshedTunnelToken ? { tunnel_name: string(currentTunnel.name), tunnel_token: refreshedTunnelToken } : {}),
+    });
+    return { verified: true, accountId, accountChanged, tunnelInvalidated, zoneCount: zones.length, tunnelCount: tunnels.length, checks: { token: true, tunnelRead: true, zoneRead: true, dnsRead: true } };
   }
 
   async function fetchHandler(request: Request): Promise<Response> {
@@ -75,7 +119,7 @@ export function createApp(options: AppOptions = {}): { fetch(request: Request): 
         for (const key of ["cloudflare_api_token", "account_id", "tunnel_id", "tunnel_token"]) requiredSetting(db, key);
         const body = await optionalBody(request); const autoStart = body.connectorAutoStart !== false;
         db.setSettings({ setup_completed: "true", connector_auto_start: String(autoStart) });
-        if (autoStart) await connector.start(); return json({ completed: true, connector: connector.snapshot() });
+        if (autoStart) await startConnector(); return json({ completed: true, connector: connector.snapshot() });
       }
 
       if (path === "/api/cloudflare/zones" && method === "GET") return json({ zones: (await cloudflare().zones(requiredSetting(db, "account_id"))).filter((zone) => !zone.status || zone.status === "active") });
@@ -105,9 +149,9 @@ export function createApp(options: AppOptions = {}): { fetch(request: Request): 
       }
 
       if (path === "/api/connector" && method === "GET") return json(connector.snapshot());
-      if (path === "/api/connector/start" && method === "POST") { return json(await connector.start()); }
+      if (path === "/api/connector/start" && method === "POST") { return json(await startConnector()); }
       if (path === "/api/connector/stop" && method === "POST") { return json(await connector.stop()); }
-      if (path === "/api/connector/restart" && method === "POST") { return json(await connector.restart()); }
+      if (path === "/api/connector/restart" && method === "POST") { await connector.stop(); return json(await startConnector()); }
       if (path === "/api/connector/logs" && method === "GET") return json({ logs: connector.recentLogs(numberParam(url, "limit", 200)) });
       if (path === "/api/connector/events" && method === "GET") return connectorEvents(connector, request.signal);
 
@@ -135,19 +179,33 @@ export function createApp(options: AppOptions = {}): { fetch(request: Request): 
     } catch (error) { return errorResponse(error); }
   }
 
-  return { fetch: fetchHandler, db, connector };
+  return { fetch: fetchHandler, db, connector, startConnector };
 }
 
 function connectorEvents(connector: ConnectorManager, signal: AbortSignal): Response {
-  const encoder = new TextEncoder(); let unsubscribe = () => {};
+  const encoder = new TextEncoder(); let unsubscribe = () => {}; let heartbeat: ReturnType<typeof setInterval> | null = null; let cleaned = false;
+  let cleanup = () => {};
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const send = (event: string, data: unknown) => controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        if (heartbeat) clearInterval(heartbeat);
+        unsubscribe(); signal.removeEventListener("abort", abort);
+      };
+      const close = () => { cleanup(); try { controller.close(); } catch {} };
+      const send = (event: string, data: unknown) => {
+        if (cleaned) return;
+        try { controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)); }
+        catch { cleanup(); }
+      };
+      const abort = () => close();
       for (const log of connector.recentLogs(100)) send("log", log);
       unsubscribe = connector.subscribe(send);
-      const heartbeat = setInterval(() => send("ping", { timestamp: new Date().toISOString() }), 15_000);
-      signal.addEventListener("abort", () => { clearInterval(heartbeat); unsubscribe(); try { controller.close(); } catch {} }, { once: true });
-    }, cancel() { unsubscribe(); },
+      heartbeat = setInterval(() => send("ping", { timestamp: new Date().toISOString() }), 10_000);
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) close();
+    }, cancel() { cleanup(); },
   });
   return new Response(stream, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" } });
 }
@@ -162,7 +220,7 @@ function connectorSettings(db: AppDatabase): JsonObject {
 }
 
 async function bodyObject(request: Request): Promise<JsonObject> {
-  const ct = request.headers.get("content-type")?.split(";")[0]?.trim();
+  const ct = request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
   if (ct !== "application/json") throw new HttpError(415, "请求内容类型必须是 application/json");
   try { const body = await request.json(); if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error(); return body as JsonObject; }
   catch { throw new HttpError(400, "请求中的 JSON 数据格式无效"); }
@@ -198,5 +256,7 @@ function errorResponse(error: unknown): Response {
     return json({ error: { code, message: error.message } }, error.status);
   }
   if (error instanceof CloudflareError) return json({ error: { code: "CLOUDFLARE_ERROR", message: error.message, details: error.errors } }, 502);
-  return json({ error: { code: "INTERNAL_ERROR", message: "服务器内部错误" } }, 500);
+  const message = error instanceof Error ? error.message : "服务器内部错误";
+  const expected = /不存在|无效|必须|需要|尚未|已经|初始化|不能|错误|失败|冲突|修改|配置|超时|区域|域名|端口|协议|密码|用户名|Token/i.test(message);
+  return json({ error: { code: expected ? "INVALID_OPERATION" : "INTERNAL_ERROR", message: expected ? message : "服务器内部错误" } }, expected ? 400 : 500);
 }

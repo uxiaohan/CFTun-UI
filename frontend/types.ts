@@ -103,7 +103,7 @@ export interface Operation {
 export interface MappingMutation { mapping: Mapping; operationId: string }
 export interface DeleteMutation { operationId: string }
 export interface MappingSyncResult { imported: number; skipped: number; dnsLinked: number; mappings?: Mapping[] }
-export interface CloudflareSettingsResult { updated: true; accountChanged: boolean; accountId: string; zoneCount: number; tunnelCount: number }
+export interface CloudflareSettingsResult { updated: true; accountChanged: boolean; tunnelInvalidated: boolean; accountId: string; zoneCount: number; tunnelCount: number }
 export type ConnectorProtocol = "auto" | "quic" | "http2";
 export type EdgeIpVersion = "auto" | "4" | "6";
 export interface ConnectorSettingsInput { autoStart: boolean; protocol: ConnectorProtocol; edgeIpVersion: EdgeIpVersion }

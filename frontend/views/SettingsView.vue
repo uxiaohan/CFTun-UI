@@ -86,7 +86,10 @@ async function saveCloudflare(): Promise<void> {
   try {
     const result = await apiClient.updateCloudflare({ accountId: accountId.value.trim(), token: apiToken.value });
     apiToken.value = "";
-    notify(result.accountChanged ? "Account 已切换，本地绑定和映射已清空，请重新完成设置" : "Cloudflare 凭据已更新", "success", 7000);
+    const message = result.accountChanged ? "Account 已切换，本地绑定和映射已清空，请重新完成设置"
+      : result.tunnelInvalidated ? "Cloudflare 凭据已更新，但原 Tunnel 已不存在，请重新选择 Tunnel"
+      : "Cloudflare 凭据和 Tunnel Token 已更新";
+    notify(message, result.tunnelInvalidated ? "info" : "success", 7000);
     await refresh();
   } catch (error: unknown) {
     notify(messageFor(error, "无法更新 Cloudflare 凭据，请稍后重试"), "error");

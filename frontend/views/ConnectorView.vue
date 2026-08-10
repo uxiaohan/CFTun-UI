@@ -13,9 +13,9 @@ const connector = computed(() => state.connector); const restartLabel = computed
 async function scrollEnd(): Promise<void> { if (!follow.value) return; await nextTick(); if (logPanel.value) logPanel.value.scrollTop = logPanel.value.scrollHeight; }
 function addLog(log: ConnectorLog): void { if (logs.value.some((item) => item.id === log.id)) return; logs.value.push(log); if (logs.value.length > 1000) logs.value.splice(0, logs.value.length - 1000); void scrollEnd(); }
 function logTone(message: string): string {
-  if (/\b(?:ERR|FTL)\b/.test(message)) return "text-red-400";
-  if (/\bWRN\b/.test(message)) return "text-amber-300";
-  if (/\bINF\b/.test(message)) return "text-[#c9cdd4]";
+  if (/\b(?:ERR|FTL)\b|unauthorized|failed|error=/i.test(message)) return "text-red-400";
+  if (/\bWRN\b|warning|retry|backoff/i.test(message)) return "text-amber-300";
+  if (/\bINF\b|registered tunnel connection|connection established|connected|started|healthy|已启动|运行中/i.test(message)) return "text-emerald-300/90";
   return "text-[#aeb4be]";
 }
 function statusEvent(event: MessageEvent<string>): void { const snapshot = JSON.parse(event.data) as ConnectorSnapshot; setConnector(snapshot); if (restarting.value && snapshot.state === "running") { restarting.value = false; waitingHealthy.value = false; if (restartTimeout) clearTimeout(restartTimeout); notify("Connector 已恢复运行", "success"); } else if (restarting.value) waitingHealthy.value = true; }

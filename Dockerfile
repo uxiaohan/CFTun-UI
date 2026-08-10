@@ -7,7 +7,7 @@ FROM --platform=$BUILDPLATFORM oven/bun:${BUN_VERSION} AS builder
 
 WORKDIR /build
 
-COPY package.json tsconfig.json index.ts ./
+COPY package.json tsconfig.json index.ts docker-entrypoint.ts ./
 COPY src/ ./src/
 
 RUN bun build ./index.ts \
@@ -17,8 +17,8 @@ RUN bun build ./index.ts \
 
 WORKDIR /build/frontend
 
-COPY frontend/package.json ./
-RUN bun install --no-save --registry https://registry.npmjs.org
+COPY frontend/package.json frontend/bun.lock ./
+RUN bun install --frozen-lockfile --registry https://registry.npmjs.org
 
 COPY frontend/ ./
 RUN bun run build
@@ -32,9 +32,10 @@ FROM oven/bun:${BUN_VERSION}-slim AS bun-runtime
 FROM cloudflare/cloudflared:${CLOUDFLARED_VERSION}
 
 COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
-COPY --from=builder /out/server.js /app/server.js
-COPY --from=builder /build/frontend/dist /app/frontend/dist
-COPY --from=builder /out/data /data
+COPY --from=builder --chown=0:0 /out/server.js /app/server.js
+COPY --from=builder --chown=0:0 /build/docker-entrypoint.ts /app/docker-entrypoint.ts
+COPY --from=builder --chown=0:0 /build/frontend/dist /app/frontend/dist
+COPY --from=builder --chown=0:0 /out/data /data
 
 WORKDIR /app
 
@@ -51,4 +52,4 @@ USER 0:0
 VOLUME ["/data"]
 
 ENTRYPOINT ["/usr/local/bin/bun"]
-CMD ["/app/server.js"]
+CMD ["/app/docker-entrypoint.ts"]
