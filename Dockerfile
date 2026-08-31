@@ -43,6 +43,7 @@ ENV NODE_ENV=production \
     SERVER_HOST=0.0.0.0 \
     SERVER_PORT=9911 \
     DATA_DIR=/data \
+    NO_AUTH_RUN=0 \
     FRONTEND_DIR=/app/frontend/dist \
     CLOUDFLARED_PATH=/usr/local/bin/cloudflared \
     BUN_RUNTIME_TRANSPILER_CACHE_PATH=0

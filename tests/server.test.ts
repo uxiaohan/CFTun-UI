@@ -79,6 +79,34 @@ describe("authentication API", () => {
     expect(newLogin.status).toBe(200);
   });
 
+  test("allows business API access without local credentials when auth is disabled", async () => {
+    db = new AppDatabase(":memory:");
+    const app = createApp({ database: db, noAuth: true });
+
+    const status = await app.fetch(new Request("http://localhost/api/status"));
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({ authRequired: false });
+
+    const setup = await app.fetch(new Request("http://localhost/api/setup"));
+    expect(setup.status).toBe(200);
+  });
+
+  test("requires credentials unless auth is explicitly disabled", async () => {
+    db = new AppDatabase(":memory:");
+    const app = createApp({ database: db, noAuth: false });
+
+    const response = await app.fetch(new Request("http://localhost/api/setup"));
+    expect(response.status).toBe(401);
+  });
+
+  test("does not disable auth for other environment values", async () => {
+    db = new AppDatabase(":memory:");
+    const app = createApp({ database: db, noAuth: false });
+
+    const response = await app.fetch(new Request("http://localhost/api/setup"));
+    expect(response.status).toBe(401);
+  });
+
   test("validates and saves account id with the Cloudflare API token", async () => {
     db = new AppDatabase(":memory:");
     const accountId = "0123456789abcdef0123456789abcdef";

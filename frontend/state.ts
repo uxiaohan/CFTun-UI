@@ -6,6 +6,7 @@ interface AppState {
   initialized: boolean;
   bootstrapping: boolean;
   authConfigured: boolean;
+  authRequired: boolean;
   authenticated: boolean;
   username: string;
   setupCompleted: boolean;
@@ -16,7 +17,7 @@ interface AppState {
   toasts: Toast[];
 }
 
-const state = reactive<AppState>({ initialized: false, bootstrapping: false, authConfigured: true, authenticated: false, username: "", setupCompleted: false, bootstrapError: null, publicStatus: null, setup: null, connector: null, toasts: [] });
+const state = reactive<AppState>({ initialized: false, bootstrapping: false, authConfigured: true, authRequired: true, authenticated: false, username: "", setupCompleted: false, bootstrapError: null, publicStatus: null, setup: null, connector: null, toasts: [] });
 let toastId = 0;
 const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
@@ -26,10 +27,12 @@ export function messageFor(error: unknown, fallback = "操作失败，请稍后�
 
 async function loadSession(): Promise<void> {
   const status = await apiClient.status();
-  state.publicStatus = status; state.authConfigured = status.authConfigured; state.setupCompleted = status.setupCompleted; state.connector = status.connector;
-  if (!status.authConfigured) { clearSession(); return; }
+  state.publicStatus = status; state.authRequired = status.authRequired; state.authConfigured = status.authConfigured; state.setupCompleted = status.setupCompleted; state.connector = status.connector;
+  if (!status.authRequired) {
+    state.authenticated = true; state.username = "免认证模式";
+  } else if (!status.authConfigured) { clearSession(); return; }
   try {
-    const user = await apiClient.me();
+    const user = status.authRequired ? await apiClient.me() : { authenticated: true as const, username: "免认证模式" };
     state.authenticated = true; state.username = user.username;
     const setup = await apiClient.setup();
     state.setup = setup; state.setupCompleted = setup.completed; state.publicStatus = { ...status, setupCompleted: setup.completed };

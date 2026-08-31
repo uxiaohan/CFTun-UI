@@ -6,11 +6,12 @@ import { testOrigin } from "./mappings/health.ts";
 import { MappingService } from "./mappings/service.ts";
 import type { JsonObject, MappingInput } from "./types.ts";
 
-export interface AppOptions { database?: AppDatabase; cloudflareBaseUrl?: string; connector?: ConnectorManager }
+export interface AppOptions { database?: AppDatabase; cloudflareBaseUrl?: string; connector?: ConnectorManager; noAuth?: boolean }
 
 export function createApp(options: AppOptions = {}): { fetch(request: Request): Promise<Response>; db: AppDatabase; connector: ConnectorManager; startConnector(): Promise<ReturnType<ConnectorManager["snapshot"]>> } {
   const db = options.database ?? new AppDatabase();
   const auth = new AuthService(db);
+  const noAuth = options.noAuth ?? process.env.NO_AUTH_RUN === "1";
   const cloudflare = (() => {
     let cached: CloudflareClient | null = null;
     let cachedToken = "";
@@ -84,7 +85,7 @@ export function createApp(options: AppOptions = {}): { fetch(request: Request): 
     const url = new URL(request.url); const path = url.pathname; const method = request.method;
     try {
       if (method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request) });
-      if (path === "/api/status" && method === "GET") return json({ ok: true, authConfigured: auth.configured(), setupCompleted: db.getSetting("setup_completed") === "true", connector: connector.snapshot() });
+      if (path === "/api/status" && method === "GET") return json({ ok: true, authRequired: !noAuth, authConfigured: auth.configured(), setupCompleted: db.getSetting("setup_completed") === "true", connector: connector.snapshot() });
       if (path === "/api/auth/setup" && method === "POST") {
         assertSameOrigin(request); const body = await bodyObject(request); await auth.initialize(string(body.username), string(body.password));
         return json({ configured: true }, 201);
@@ -97,7 +98,7 @@ export function createApp(options: AppOptions = {}): { fetch(request: Request): 
         assertSameOrigin(request); return json({ authenticated: false }, 200, { "Set-Cookie": auth.logout(request) });
       }
 
-      const session = auth.authenticate(request);
+      const session = noAuth ? { username: "no-auth", sessionId: "" } : auth.authenticate(request);
       if (!session) return json({ error: { code: "UNAUTHORIZED", message: "请先登录" } }, 401);
       if (method !== "GET" && method !== "HEAD") assertSameOrigin(request);
       if (path === "/api/auth/me" && method === "GET") return json({ authenticated: true, username: session.username });

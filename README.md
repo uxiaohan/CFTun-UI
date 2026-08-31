@@ -24,6 +24,19 @@ docker compose up -d
 
 控制台：<http://127.0.0.1:9911>
 
+如需在可信内网中关闭本地账号登录，可设置 `NO_AUTH_RUN=1`：
+
+```bash
+docker run -d \
+  --name cftun-ui \
+  --network host \
+  -e NO_AUTH_RUN=1 \
+  -v cftun-data:/data \
+  uxiaohan/cftun-ui:latest
+```
+
+该模式只跳过本地用户名/密码验证，Cloudflare API Token、Account 和 Tunnel 仍需完成配置；任何能访问控制台的人都可以管理 Tunnel，请勿暴露到不可信网络。默认值为 `0`，只有严格设置为 `1` 时生效。Compose 用户可在 `compose.yml` 中修改同名环境变量后重建容器。
+
 ### 预览图
 
 ![CFTun-UI](CFTun-UI.webp)

@@ -4,6 +4,7 @@ export type ToastKind = "success" | "error" | "info";
 
 export interface PublicStatus {
   ok: boolean;
+  authRequired: boolean;
   authConfigured: boolean;
   setupCompleted: boolean;
   connector: ConnectorSnapshot;

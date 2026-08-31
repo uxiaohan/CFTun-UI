@@ -16,6 +16,7 @@ services:
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 9911
       DATA_DIR: /data
+      NO_AUTH_RUN: 0
     volumes:
       - cftun-data:/data
 
