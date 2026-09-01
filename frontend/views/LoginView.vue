@@ -2,7 +2,7 @@
 import { computed, nextTick, ref } from "vue";
 import { messageFor, useAppState } from "../state";
 
-const { state, login, initializeAuth } = useAppState();
+const { state, login, initializeAuth, notify } = useAppState();
 const username = ref("");
 const password = ref("");
 const confirmPassword = ref("");
@@ -23,7 +23,7 @@ async function submit(): Promise<void> {
     if (firstRun.value) await initializeAuth(credentials);
     else await login(credentials);
   } catch (caught) {
-    error.value = messageFor(caught, firstRun.value ? "无法创建本地管理员" : "登录失败");
+    notify(messageFor(caught, firstRun.value ? "无法创建本地管理员" : "登录失败"), "error");
     password.value = "";
     confirmPassword.value = "";
     await nextTick();

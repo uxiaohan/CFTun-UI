@@ -1,6 +1,7 @@
 # dependencies (bun install)
 node_modules
 .headroom/
+.serena
 # output
 out
 dist

@@ -72,7 +72,9 @@ async function submit(): Promise<void> {
       notify("初始化完成，正在进入控制台", "success");
       await refresh();
     }
-  } catch (caught) { error.value = messageFor(caught); }
+  } catch (caught) {
+    notify(messageFor(caught, step.value === "token" ? "Cloudflare API Token 验证失败" : step.value === "tunnel" ? "Tunnel 配置失败" : "初始化失败"), "error");
+  }
   finally { busy.value = false; syncStage.value = ""; }
 }
 
